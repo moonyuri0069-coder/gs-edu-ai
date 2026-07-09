@@ -2,6 +2,11 @@
 <html lang="ko" data-theme="light">
 <head>
 <meta charset="UTF-8">
+<script>
+const SUPA_URL = 'https://eldpjvlefuhyfacrmwsl.supabase.co';
+const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GS더프레시 AI 교육만족도 분석 시스템</title>
 <style>
@@ -1671,101 +1676,17 @@ function openSlideFullscreen(){
   const attendUrl=`${location.origin||''}${location.pathname}#/attend/${GUIDE_SEL}`;
   const surveyUrl=`${location.origin||''}${location.pathname}#/s/${GUIDE_SEL}`;
   const win=window.open('','_blank','width=1280,height=720');
+  const slideHtml=renderSlide(GUIDE_SLIDE,t,attendUrl,surveyUrl);
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
-<script>
-// Supabase 설정
-const SUPA_URL = 'https://eldpjvlefuhyfacrmwsl.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>*{margin:0;padding:0;box-sizing:border-box}body{width:100vw;height:100vh;overflow:hidden;font-family:'Pretendard',sans-serif}
   #slide{width:100%;height:100%}</style></head>
-  <body><div id="slide">${renderSlide(GUIDE_SLIDE,t,attendUrl,surveyUrl)}</div>
+  <body><div id="slide">${slideHtml}</div>
   <script>
   function drawQR(canvas,text){const n=29,s=Math.floor(Math.min(canvas.width,canvas.height)/n);canvas.width=n*s;canvas.height=n*s;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,n*s,n*s);ctx.fillStyle='#111';let x=0;for(const ch of text){x=(x*31+ch.charCodeAt(0))>>>0;}const rnd=()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return(x>>>0)/4294967296;};for(let i=0;i<n;i++)for(let j=0;j<n;j++){if(rnd()<.46)ctx.fillRect(i*s,j*s,s,s);}const F=(cx,cy)=>{ctx.fillStyle='#111';ctx.fillRect(cx,cy,7*s,7*s);ctx.fillStyle='#fff';ctx.fillRect(cx+s,cy+s,5*s,5*s);ctx.fillStyle='#111';ctx.fillRect(cx+2*s,cy+2*s,3*s,3*s);};ctx.fillStyle='#fff';ctx.fillRect(0,0,8*s,8*s);ctx.fillRect((n-8)*s,0,8*s,8*s);ctx.fillRect(0,(n-8)*s,8*s,8*s);F(0,0);F((n-7)*s,0);F(0,(n-7)*s);}
   const ca=document.getElementById('qrAttend')||document.getElementById('qrSurvey');
   if(ca)drawQR(ca,ca.id==='qrAttend'?'${attendUrl}':'${surveyUrl}');
   document.addEventListener('keydown',e=>{if(e.key==='Escape'||e.key==='F11')window.close();});
-  <\/script>
-<script>
-// ═══ Supabase 연동 브릿지 ═══
-const _supa = window.supabase?.createClient(SUPA_URL, SUPA_ANON);
-
-// DB 저장 함수 오버라이드 (기존 localStorage save에 Supabase 추가)
-const _origSave = window.save;
-
-async function syncToSupabase() {
-  if (!_supa || !DB) return;
-  try {
-    // 교육 동기화
-    for (const t of DB.trainings) {
-      await fetch('/api/trainings', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          id: t.id, name: t.name, date: t.date, round: t.round,
-          type: t.type, place: t.place, invited: t.invited, status: t.status,
-          subtitle: t.subtitle||'', agenda_head: t.agendaHead||'',
-          lectures: t.lectures, attendees: t.attendees||[],
-          budget: t.budget||[], checkins: t.checkins||[], photos: t.photos||[]
-        })
-      });
-    }
-    // 강사 동기화
-    for (const i of DB.instructors) {
-      await fetch('/api/instructors', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({id:i.id,name:i.name,field:i.field||'',bio:i.bio||''})
-      });
-    }
-  } catch(e) { console.warn('Supabase 동기화 오류:', e); }
-}
-
-// 설문 제출 시 Supabase에 저장
-const _origSubmit = window.submitSurvey;
-if (typeof submitSurvey !== 'undefined') {
-  const origSubmit = submitSurvey;
-  window.submitSurvey = async function() {
-    const result = origSubmit();
-    // 마지막 응답을 Supabase에 전송
-    const lastResp = DB.responses[DB.responses.length-1];
-    if (lastResp) {
-      try {
-        await fetch('/api/responses', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({
-            id: lastResp.id,
-            trainingId: lastResp.trainingId,
-            lect: lastResp.lect,
-            recommendLecture: lastResp.recommendLecture||'',
-            need: lastResp.need||'',
-            etc: lastResp.etc||'',
-            at: lastResp.at
-          })
-        });
-      } catch(e) { console.warn('응답 저장 오류:', e); }
-    }
-    return result;
-  };
-}
-
-// 저장 시 Supabase 동기화 (debounce)
-let _syncTimer;
-const _origSaveFn = typeof save !== 'undefined' ? save : null;
-if (_origSaveFn) {
-  window.save = function() {
-    _origSaveFn();
-    clearTimeout(_syncTimer);
-    _syncTimer = setTimeout(syncToSupabase, 1000);
-  };
-}
-
-console.log('Supabase 브릿지 초기화 완료');
-</script>
-
-</body></html>`;
+  <\/script></body></html>`;
   win.document.write(html);win.document.close();
 }
 
@@ -2032,84 +1953,5 @@ function renderDone(){
 }
 load();applyTheme();render();
 </script>
-
-<script>
-// ═══ Supabase 연동 브릿지 ═══
-const _supa = window.supabase?.createClient(SUPA_URL, SUPA_ANON);
-
-// DB 저장 함수 오버라이드 (기존 localStorage save에 Supabase 추가)
-const _origSave = window.save;
-
-async function syncToSupabase() {
-  if (!_supa || !DB) return;
-  try {
-    // 교육 동기화
-    for (const t of DB.trainings) {
-      await fetch('/api/trainings', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          id: t.id, name: t.name, date: t.date, round: t.round,
-          type: t.type, place: t.place, invited: t.invited, status: t.status,
-          subtitle: t.subtitle||'', agenda_head: t.agendaHead||'',
-          lectures: t.lectures, attendees: t.attendees||[],
-          budget: t.budget||[], checkins: t.checkins||[], photos: t.photos||[]
-        })
-      });
-    }
-    // 강사 동기화
-    for (const i of DB.instructors) {
-      await fetch('/api/instructors', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({id:i.id,name:i.name,field:i.field||'',bio:i.bio||''})
-      });
-    }
-  } catch(e) { console.warn('Supabase 동기화 오류:', e); }
-}
-
-// 설문 제출 시 Supabase에 저장
-const _origSubmit = window.submitSurvey;
-if (typeof submitSurvey !== 'undefined') {
-  const origSubmit = submitSurvey;
-  window.submitSurvey = async function() {
-    const result = origSubmit();
-    // 마지막 응답을 Supabase에 전송
-    const lastResp = DB.responses[DB.responses.length-1];
-    if (lastResp) {
-      try {
-        await fetch('/api/responses', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({
-            id: lastResp.id,
-            trainingId: lastResp.trainingId,
-            lect: lastResp.lect,
-            recommendLecture: lastResp.recommendLecture||'',
-            need: lastResp.need||'',
-            etc: lastResp.etc||'',
-            at: lastResp.at
-          })
-        });
-      } catch(e) { console.warn('응답 저장 오류:', e); }
-    }
-    return result;
-  };
-}
-
-// 저장 시 Supabase 동기화 (debounce)
-let _syncTimer;
-const _origSaveFn = typeof save !== 'undefined' ? save : null;
-if (_origSaveFn) {
-  window.save = function() {
-    _origSaveFn();
-    clearTimeout(_syncTimer);
-    _syncTimer = setTimeout(syncToSupabase, 1000);
-  };
-}
-
-console.log('Supabase 브릿지 초기화 완료');
-</script>
-
 </body>
 </html>
