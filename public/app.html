@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <script>
-const SUPA_URL = 'https://eldpjvlefuhyfacrmwsl.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
+const SUPA_URL='https://eldpjvlefuhyfacrmwsl.supabase.co';
+const SUPA_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -383,6 +383,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 const LS_KEY='gs_edu_ai_v2';
 const TYPES=['OFC','개점지원담당','인턴사원','점포영업담당','부점장','점장','개발담당','기타'];
 const LIKERT=['아쉬움','보통','만족']; // 1~3
+const LIKERT_SCORE=[1,3,5]; // 아쉬움=1, 보통=3, 만족=5
+function toScore(v){return LIKERT_SCORE[(v||1)-1]||1;} // 1~3 인덱스 → 실제 점수
 const POS_POOL=['디테일한 설명이 좋았습니다','실무에 바로 적용 가능한 내용이었습니다','쉽고 간략하게 설명을 잘해주셨습니다',
  '예시를 들어주는 설명이 좋았습니다','질문에 답변을 잘해주셔서 좋았습니다','사례를 잘 풀어 이해하기 좋았습니다',
  '몰랐던 부분을 알 수 있었습니다','앞으로의 방향성을 알게 되었습니다','전문성이 우수했습니다','강의 내용이 간결하고 좋았습니다'];
@@ -489,7 +491,7 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 function respOf(tid){return DB.responses.filter(r=>r.trainingId===tid);}
 function lectOf(t,lid){return t.lectures.find(l=>l.id===lid);}
 function lectLabel(t,L){const ins=byId(DB.instructors,L.instructorId);return `${L.title} - ${ins?ins.name:''}`;}
-function respAvg(r){return avg(Object.values(r.lect).flatMap(v=>[v.expert,v.practical]));}
+function respAvg(r){return avg(Object.values(r.lect).flatMap(v=>[toScore(v.expert),toScore(v.practical)]));}
 function trainingAvg(tid){const rs=respOf(tid);return rs.length?avg(rs.map(respAvg)):0;}
 function trainingRate(t){const n=respOf(t.id).length;return t.invited?Math.min(100,n/t.invited*100):0;}
 function lectureAvg(tid,lid){const vs=respOf(tid).map(r=>r.lect[lid]).filter(Boolean);
@@ -501,9 +503,84 @@ function instructorStat(iid,fromD,toD){
     if(fromD&&t.date<fromD)return;
     if(toD&&t.date>toD)return;
     t.lectures.forEach(L=>{if(L.instructorId!==iid)return;n++;
-      respOf(t.id).forEach(r=>{const v=r.lect[L.id];if(!v)return;ex.push(v.expert);pr.push(v.practical);
+      respOf(t.id).forEach(r=>{const v=r.lect[L.id];if(!v)return;ex.push(toScore(v.expert));pr.push(toScore(v.practical));
         (perT[t.id]=perT[t.id]||[]).push((v.expert+v.practical)/2);});});});
   return {n,expert:avg(ex),practical:avg(pr),avg:avg([...ex,...pr]),perT};
+}
+
+const GEMINI_KEY='AQ.Ab8RN6K3WVT1c56fBJzsFC4OHTZ7Tr1ub0oYrsmr3CTgjrxf_Q';
+
+async function runGeminiAI(tid){
+  const rs=respOf(tid);
+  if(!rs.length){toast('응답 데이터가 없습니다');return;}
+  const t=byId(DB.trainings,tid);
+  
+  // 내장 분석 먼저 실행
+  const base=analyze(tid);
+  
+  // 서술형 응답 수집
+  const goods=[],imps=[],etcs=[];
+  rs.forEach(r=>{
+    Object.values(r.lect).forEach(v=>{
+      if(v.good&&v.good.length>2)goods.push(v.good);
+      if(v.improve&&v.improve.length>2)imps.push(v.improve);
+    });
+    if(r.etc&&r.etc.length>2)etcs.push(r.etc);
+    if(r.need&&r.need.length>2)etcs.push(r.need);
+  });
+  
+  if(!goods.length&&!imps.length){
+    toast('서술형 응답이 없어 내장 분석으로 진행합니다');
+    render();return;
+  }
+  
+  toast('Gemini AI 분석 중... 잠시 기다려주세요');
+  
+  const prompt=`다음은 GS더프레시 "${t.name} ${t.round}차" 교육 만족도 설문 결과입니다.
+
+[좋았던 점 (${goods.length}건)]
+${goods.slice(0,30).join('\n')}
+
+[개선이 필요한 점 (${imps.length}건)]
+${imps.slice(0,30).join('\n')}
+
+[기타 의견]
+${etcs.slice(0,10).join('\n')}
+
+위 내용을 분석하여 아래 형식으로 JSON만 반환해주세요 (다른 텍스트 없이):
+{
+  "summary": "교육 전반에 대한 2~3문장 종합 평가",
+  "positives": ["긍정 키워드1", "긍정 키워드2", "긍정 키워드3"],
+  "improvements": ["개선 키워드1", "개선 키워드2"],
+  "recommendation": "향후 교육 운영을 위한 구체적 제언 2~3문장",
+  "highlight": "가장 인상적인 피드백 한 줄"
+}`;
+
+  try{
+    const res=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})}
+    );
+    const data=await res.json();
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const clean=text.replace(/```json|```/g,'').trim();
+    const gemini=JSON.parse(clean);
+    
+    // Gemini 결과를 기존 분석에 병합
+    if(DB.ai[tid]){
+      DB.ai[tid].gemini=gemini;
+      DB.ai[tid].summary=gemini.summary;
+      DB.ai[tid].plan=gemini.recommendation;
+      DB.ai[tid].geminiAt=new Date().toISOString();
+    }
+    save();render();
+    toast('✨ Gemini AI 분석 완료!');
+  }catch(e){
+    console.error('Gemini 오류:',e);
+    toast('AI 분석 오류 — 내장 분석으로 표시합니다');
+    render();
+  }
 }
 
 /* ═══════════ AI 분석 엔진 ═══════════ */
@@ -545,7 +622,7 @@ function analyze(tid){
 function getAI(tid){return DB.ai[tid]||analyze(tid);}
 
 /* ═══════════ SVG 차트 ═══════════ */
-function chLine(labels,vals,{w=520,h=200,min=1,max=3,color='var(--green-b)'}={}){
+function chLine(labels,vals,{w=520,h=200,min=1,max=5,color='var(--green-b)'}={}){
   const px=44,py=18,gw=w-px-14,gh=h-py-34,n=vals.length;
   const X=i=>px+gw*(n>1?i/(n-1):0),Y=v=>py+gh*(1-(v-min)/(max-min));
   let grid='',pts='',dots='',lbl='';
@@ -711,7 +788,7 @@ function vDash(){
     ${kpi('총 교육수',T.length,'개','올해 누적')}
     ${kpi('총 응답자',R.length,'명','전체 설문 응답')}
     ${kpi('평균 응답률',pct(avg(T.map(trainingRate))),'','초대 인원 대비','up')}
-    ${kpi('평균 만족도',f1(totalAvg),'점','강의평가 기준 · 3점',totalAvg>=4.2?'up':'flat')}
+    ${kpi('평균 만족도',f1(totalAvg),'점','강의평가 기준 · 5점',totalAvg>=4.2?'up':'flat')}
   </div>
   <div class="grid g2" style="margin-top:16px">
     <div class="card card-pad"><div class="spread"><div><div class="card-title">가장 만족도가 높은 과정</div>
@@ -1017,7 +1094,7 @@ function vSurveys(){
     const lectStats=sel.lectures.map(L=>{
       const vs=rs.map(r=>r.lect[L.id]).filter(Boolean);
       const ex=avg(vs.map(v=>v.expert)),pr=avg(vs.map(v=>v.practical));
-      const tot=avg([...vs.map(v=>v.expert),...vs.map(v=>v.practical)]);
+      const tot=avg([...vs.map(v=>toScore(v.expert)),...vs.map(v=>toScore(v.practical))]);
       return {L,ex,pr,tot,n:vs.length};
     });
     // 최근 응답 타임라인
@@ -1056,7 +1133,7 @@ function vSurveys(){
           <div class="row" style="gap:16px">
             <span>전문성 <b style="color:var(--green)">${exLabel}</b></span>
             <span>실무적용 <b style="color:var(--green)">${prLabel}</b></span>
-            ${tot?`<span style="color:var(--ink3)">(평균 ${f1(tot)}/3)</span>`:'<span style="color:var(--ink4)">미응답</span>'}
+            ${tot?`<span style="color:var(--ink3)">(평균 ${f1(tot)}/5)</span>`:'<span style="color:var(--ink4)">미응답</span>'}
           </div>
         </div>`;
       }).join('')}
@@ -1068,7 +1145,7 @@ function vSurveys(){
         <span style="color:var(--ink4);width:18px;text-align:center">${i+1}</span>
         <span style="color:var(--ink3)">${r.at.slice(11,16)}</span>
         <span style="flex:1">${sel.lectures.length}개 강의 평가 완료</span>
-        <span style="color:var(--green);font-weight:700">${avg(Object.values(r.lect).flatMap(v=>[v.expert,v.practical]))?f1(avg(Object.values(r.lect).flatMap(v=>[v.expert,v.practical])))+'/3':'-'}</span>
+        <span style="color:var(--green);font-weight:700">${avg(Object.values(r.lect).flatMap(v=>[toScore(v.expert),toScore(v.practical)]))?f1(avg(Object.values(r.lect).flatMap(v=>[toScore(v.expert),toScore(v.practical)])))+'/5':'-'}</span>
       </div>`).join('')}
     </div>`:''}`;
   }
@@ -1296,7 +1373,7 @@ function vAI(){
    <select class="select" style="max-width:380px" onchange="AIQ=this.value;rerender()">
     ${DB.trainings.filter(x=>respOf(x.id).length).map(x=>`<option value="${x.id}" ${x.id===AIQ?'selected':''}>${esc(x.name)} ${x.round}차 (${x.date})</option>`).join('')}
    </select>
-   <button class="btn sm" onclick="analyze(AIQ);render();toast('AI 재분석이 완료되었습니다')">↻ AI 재분석</button>
+   <button class="btn sm" onclick="runGeminiAI(AIQ)">✨ AI 분석 (Gemini)</button>
    <button class="btn sm" onclick="dlAI(AIQ)">⬇ AI 분석 Excel</button>
    <span style="margin-left:auto"><button class="btn sm primary" onclick="RPQ=AIQ;nav('#/report')">임원보고 만들기 →</button></span></div>`;
   if(!t)return sel+'<div class="empty">분석할 교육이 없습니다</div>';
@@ -1432,7 +1509,7 @@ function vReport(){
     </div>
   </div>
   <div class="rp-kpi-row">
-    ${[['평균 만족도',f1(totalV)+' / 3.0'],['전문성·전달력',f1(ex)+' / 3.0'],['실무 적용성',f1(pr)+' / 3.0'],['응답 인원',rs.length+'명'],['응답률',pct(rate)]]
+    ${[['평균 만족도',f1(totalV)+' / 5.0'],['전문성·전달력',f1(ex)+' / 5.0'],['실무 적용성',f1(pr)+' / 5.0'],['응답 인원',rs.length+'명'],['응답률',pct(rate)]]
       .map(([l,v])=>`<div class="rp-kpi-badge"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`).join('')}
   </div>
   <hr class="rp-page-break">
