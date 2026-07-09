@@ -2,11 +2,6 @@
 <html lang="ko" data-theme="light">
 <head>
 <meta charset="UTF-8">
-<script>
-const SUPA_URL='https://eldpjvlefuhyfacrmwsl.supabase.co';
-const SUPA_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GS더프레시 AI 교육만족도 분석 시스템</title>
@@ -672,12 +667,22 @@ function chDonut(val,{size=150,color='var(--green-b)',label=''}={}){
 }
 function drawQR(canvas,text){
   if(typeof QRCode==='undefined'){
-    // QRCode.js 로드 전 fallback
-    setTimeout(()=>drawQR(canvas,text),500);return;
+    setTimeout(()=>drawQR(canvas,text),300);return;
   }
-  QRCode.toCanvas(canvas,text,{width:canvas.width||200,margin:1,
-    color:{dark:'#111111',light:'#ffffff'}},
-    err=>{if(err)console.warn('QR 오류:',err);});
+  try{
+    QRCode.toDataURL(text,{width:200,margin:1,color:{dark:'#111',light:'#fff'}},
+      (err,url)=>{
+        if(err){console.warn('QR 오류:',err);return;}
+        const ctx=canvas.getContext('2d');
+        const img=new Image();
+        img.onload=()=>{
+          canvas.width=200;canvas.height=200;
+          ctx.drawImage(img,0,0,200,200);
+        };
+        img.src=url;
+      }
+    );
+  }catch(e){console.warn('QR 생성 오류:',e);}
 }
 function csv(rows,name){
   const body=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
@@ -1170,7 +1175,7 @@ function openQR(id){
       
     </div></div>`,
    `<button class="btn" onclick="closeModal()">닫기</button>`);
-  drawQR($('#qrC'),url);
+  setTimeout(()=>drawQR($('#qrC'),url),100);
 }
 
 /* ═══════════ 강사관리 ═══════════ */
