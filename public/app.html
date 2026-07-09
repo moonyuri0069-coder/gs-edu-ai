@@ -477,7 +477,19 @@ function seedData(){
   return {version:2,theme:'light',instructors,trainings,responses,ai:{}};
 }
 let DB;
-function load(){try{const raw=localStorage.getItem(LS_KEY);DB=raw?JSON.parse(raw):seedData();}catch(e){DB=seedData();}save();}
+function load(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(raw){DB=JSON.parse(raw);}
+    else{
+      // 빈 DB로 시작 (실서비스)
+      DB={trainings:[],instructors:[],responses:[],ai:{},theme:'light'};
+    }
+  }catch(e){
+    DB={trainings:[],instructors:[],responses:[],ai:{},theme:'light'};
+  }
+  save();
+}
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(DB));}catch(e){}}
 
 /* ═══════════ 유틸 & 통계 ═══════════ */
@@ -744,11 +756,88 @@ function render(){
   }
 }
 function logout(){session=false;sessionStorage.removeItem('gs_edu_login');render();}
+
+// Supabase REST API 헬퍼
+async function sbUpsert(table, data){
+  try{
+    await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/'+table,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM',
+        'Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify(data)
+    });
+  }catch(e){console.warn('Supabase 저장 오류:',e);}
+}
+async function sbPatch(table, id, data){
+  try{
+    await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/'+table+'?id=eq.'+id,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM',
+        'Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
+      body:JSON.stringify(data)
+    });
+  }catch(e){console.warn('Supabase 업데이트 오류:',e);}
+}
+
+async function syncFromSupabase(){
+  try{
+    // 교육 목록 동기화
+    const tr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?select=*&order=date.desc',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    const trainings=await tr.json();
+    if(trainings&&trainings.length){
+      trainings.forEach(t=>{
+        const existing=byId(DB.trainings,t.id);
+        const mapped={id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
+          place:t.place,invited:t.invited,status:t.status,subtitle:t.subtitle||'',
+          agendaHead:t.agenda_head||'',lectures:t.lectures||[],
+          attendees:t.attendees||[],budget:t.budget||[],checkins:t.checkins||[]};
+        if(existing){Object.assign(existing,mapped);}
+        else{DB.trainings.push(mapped);}
+      });
+    }
+    // 강사 목록 동기화
+    const ir=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/instructors?select=*',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    const instructors=await ir.json();
+    if(instructors&&instructors.length){
+      instructors.forEach(i=>{
+        const existing=byId(DB.instructors,i.id);
+        if(existing){Object.assign(existing,i);}
+        else{DB.instructors.push(i);}
+      });
+    }
+    // 응답 동기화
+    const rr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/responses?select=*',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    const responses=await rr.json();
+    if(responses&&responses.length){
+      responses.forEach(r=>{
+        if(!DB.responses.find(x=>x.id===r.id)){
+          DB.responses.push({
+            id:r.id,trainingId:r.training_id,at:r.submitted_at,
+            lect:r.lect||{},recommendLecture:r.recommend_lecture||'',
+            need:r.need||'',etc:r.etc||''
+          });
+        }
+      });
+    }
+    save();
+    toast('✅ 데이터 동기화 완료');
+  }catch(e){
+    console.warn('동기화 오류:',e);
+    toast('동기화 실패 — 로컬 데이터로 표시합니다');
+  }
+}
+
 function doRefresh(){
   const btn=document.getElementById('refreshBtn');
   if(btn){btn.style.transform='rotate(360deg)';btn.style.transition='transform 0.5s ease';
     setTimeout(()=>{btn.style.transform='';btn.style.transition=''},500);}
-  render();
+  syncFromSupabase().then(()=>render());
   toast('새로고침 완료');
 }
 function toggleTheme(){DB.theme=DB.theme==='dark'?'light':'dark';save();applyTheme();render();}
@@ -762,11 +851,38 @@ function renderLogin(){
     <div class="fld-group"><label class="fld">사번 또는 이메일</label><input class="input" id="lgId" placeholder="admin@gsretail.com"></div>
     <div class="fld-group"><label class="fld">비밀번호</label><input class="input" id="lgPw" type="password" placeholder="••••••••"></div>
     <button class="btn primary" style="width:100%;justify-content:center;padding:12px" onclick="doLogin()">로그인</button>
-    <div style="font-size:.78rem;color:var(--ink3);text-align:center;margin-top:14px">데모 — 아무 값이나 입력해도 로그인됩니다</div>
+    
   </div></div>`;
   $('#lgPw').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 }
-function doLogin(){session=true;sessionStorage.setItem('gs_edu_login','1');render();toast('로그인되었습니다');}
+async function doLogin(){
+  const email=$('#lgId').value.trim();
+  const pw=$('#lgPw').value;
+  if(!email||!pw){toast('이메일과 비밀번호를 입력해주세요');return;}
+  const btn=document.querySelector('.btn.primary[onclick="doLogin()"]');
+  if(btn)btn.textContent='로그인 중...';
+  try{
+    const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/auth/v1/token?grant_type=password',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'},
+      body:JSON.stringify({email,password:pw})
+    });
+    const data=await res.json();
+    if(data.access_token){
+      session=true;
+      sessionStorage.setItem('gs_edu_login','1');
+      sessionStorage.setItem('gs_edu_token',data.access_token);
+      syncFromSupabase().then(()=>render());
+      toast('로그인되었습니다');
+    }else{
+      toast('이메일 또는 비밀번호가 올바르지 않습니다');
+      if(btn)btn.textContent='로그인';
+    }
+  }catch(e){
+    toast('로그인 오류가 발생했습니다');
+    if(btn)btn.textContent='로그인';
+  }
+}
 function kpi(label,val,unit,sub,tone='flat'){
   return `<div class="card card-pad"><div class="kpi-label">${label}</div>
    <div class="kpi-value num">${val}<small>${unit}</small></div><div class="kpi-sub ${tone}">${sub}</div></div>`;
@@ -831,7 +947,8 @@ function vTrainings(){
        <button class="btn sm ${t.status==='open'?'danger':''}" onclick="toggleClose('${t.id}')">${t.status==='open'?'응답 마감':'응답 재개'}</button>
      </div></td></tr>`;}).join('')}</tbody></table></div>`;
 }
-function toggleClose(id){const t=byId(DB.trainings,id);t.status=t.status==='open'?'closed':'open';save();render();
+function toggleClose(id){const t=byId(DB.trainings,id);t.status=t.status==='open'?'closed':'open';save();
+  sbPatch('trainings',id,{status:t.status});render();
   toast(t.status==='open'?'응답을 재개했습니다':'응답을 마감했습니다');}
 let LECT_DRAFT=[];let ATT_DRAFT=[];
 function openTrainingModal(){
@@ -932,7 +1049,16 @@ function saveTraining(){
   DB.trainings.push({id,name,date,round:+$('#fRound').value||1,type:$('#fType').value,
     place:$('#fPlace').value.trim()||'미정',invited:+$('#fInvited').value||15,
     lectures,attendees,budget:[],checkins:[],subtitle:'',status:'open',createdAt:new Date().toISOString().slice(0,10)});
-  closeModal();save();render();openQR(id);toast('교육이 생성되었습니다 — QR과 설문 URL이 준비됐어요');
+  closeModal();save();
+  // Supabase 저장
+  fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings',{
+    method:'POST',headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
+    body:JSON.stringify({id,name,date,round:+$('#fRound').value||1,type:$('#fType').value,
+      place:$('#fPlace').value.trim()||'미정',invited:+$('#fInvited').value||15,
+      lectures:DB.trainings.at(-1).lectures,attendees:DB.trainings.at(-1).attendees||[],
+      budget:[],checkins:[],status:'open'})
+  }).catch(e=>console.warn(e));
+  render();openQR(id);toast('교육이 생성되었습니다 — QR과 설문 URL이 준비됐어요');
 }
 function openQR(id){
   const t=byId(DB.trainings,id);
@@ -947,7 +1073,7 @@ function openQR(id){
       <div class="row" style="margin-top:10px">
         <button class="btn sm" onclick="navigator.clipboard?.writeText('${url}');toast('URL이 복사되었습니다')">URL 복사</button>
         <button class="btn sm primary" onclick="closeModal();nav('#/s/${id}')">설문 미리보기</button></div>
-      <div style="font-size:.74rem;color:var(--ink4);margin-top:10px">* 데모용 QR 이미지 — 실서비스 배포 시 스캔 가능한 QR이 생성됩니다.</div>
+      
     </div></div>`,
    `<button class="btn" onclick="closeModal()">닫기</button>`);
   drawQR($('#qrC'),url);
@@ -1470,7 +1596,7 @@ function vReport(){
   <div class="rp-subtitle" contenteditable="${!session?'false':'true'}"
     style="outline:none;${session?'border:1.5px dashed #16a34a;':''}cursor:${session?'text':'default'}"
     id="rpSubtitle"
-    onblur="const t=byId(DB.trainings,RPQ);if(t){t.subtitle=this.innerText.trim();save();}"
+    onblur="const t=byId(DB.trainings,RPQ);if(t){t.subtitle=this.innerText.trim();save();sbPatch('trainings',RPQ,{subtitle:t.subtitle});}"
     title="${session?'클릭하여 직접 수정 가능':''}">
     ${esc((t.subtitle&&t.subtitle.trim())||'매장의 운영 및 관리 전반에 대한 역량 강화를 목적으로 現'+t.type+'을 대상으로 집합교육을 진행하였음')}
   </div>
@@ -1608,7 +1734,9 @@ function renderBudgetRows(){
 function saveBudget(tid){
   const t=byId(DB.trainings,tid);
   t.budget=BUDGET_DRAFT.filter(b=>b.item.trim()).map(b=>({...b}));
-  save();closeModal();render();toast('교육 비용이 저장되었습니다');
+  save();
+  sbPatch('trainings',tid,{budget:t.budget});
+  closeModal();render();toast('교육 비용이 저장되었습니다');
 }
 
 /* ═══════════ 교육생안내 ═══════════ */
@@ -1805,7 +1933,7 @@ function renderAgendaDoc(t){
   <!-- 헤드 메시지 (편집 가능) -->
   <div class="ag-head" contenteditable="${session?'true':'false'}"
     id="agHead" style="outline:none;${session?'border:1.5px dashed #0e5a34;':''}"
-    onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaHead=this.innerText.trim();save();}">
+    onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaHead=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_head:tr.agendaHead});}">
     ${esc(headMsg)}
   </div>
 
@@ -1886,12 +2014,13 @@ function vSettings(){
      <span class="chip ${DB.theme==='dark'?'on':''}" onclick="DB.theme='dark';save();applyTheme();render()">다크</span></div></div>
    <div class="card card-pad"><div class="card-title">AI 연동 (실서비스)</div>
     <div class="fld-group" style="margin-top:12px"><label class="fld">OpenAI API Key</label>
-     <input class="input" placeholder="sk-•••••••• (데모에서는 내장 분석엔진 사용)" disabled></div></div>
+     <div style="font-size:.82rem;color:var(--green);padding:6px 10px;background:#f0f4f1;border-radius:6px">
+    ✅ Google Gemini AI 연결됨 — AI분석 메뉴에서 [✨ AI 분석] 버튼 클릭</div></div></div>
    <div class="card card-pad"><div class="card-title">데이터 관리</div>
     <div class="card-sub">모든 데이터는 브라우저(localStorage)에 자동 저장됩니다</div>
     <div class="row" style="margin-top:12px">
      <button class="btn sm" onclick="dlAll()">전체 응답 백업(CSV)</button>
-     <button class="btn sm danger" onclick="if(confirm('데모 데이터를 초기 상태로 되돌릴까요?')){localStorage.removeItem(LS_KEY);load();applyTheme();render();toast('초기화되었습니다');}">데모 데이터 초기화</button></div></div>
+     <button class="btn sm danger" onclick="if(confirm('모든 로컬 데이터를 초기화할까요?')){localStorage.removeItem(LS_KEY);load();applyTheme();render();toast('초기화되었습니다');}">로컬 데이터 초기화</button></div></div>
    <div class="card card-pad"><div class="card-title">정보</div>
     <div style="font-size:.85rem;color:var(--ink2);margin-top:8px;line-height:1.8">
      GS더프레시 AI 교육만족도 분석 시스템 · 프로토타입 v2<br>
@@ -1902,7 +2031,28 @@ function vSettings(){
 
 /* ═══════════ 참여자 설문 (실제 설문지 구조) ═══════════ */
 let SV={};
-function renderSurvey(tid){
+async function renderSurvey(tid){
+  // Supabase에서 교육 데이터 로드 시도
+  try{
+    const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?id=eq.'+tid+'&select=*',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    const data=await res.json();
+    if(data&&data[0]){
+      const t=data[0];
+      // DB에 없으면 추가
+      if(!byId(DB.trainings,tid)){
+        DB.trainings.push({
+          id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
+          place:t.place,invited:t.invited,status:t.status,
+          lectures:t.lectures||[],attendees:t.attendees||[],
+          budget:t.budget||[],checkins:t.checkins||[],subtitle:t.subtitle||''
+        });
+        save();
+      }
+    }
+  }catch(e){console.warn('교육 로드 오류:',e);}
+  
   const t=byId(DB.trainings,tid);
   if(!t){$('#app').innerHTML='<div class="empty" style="padding-top:24vh">설문을 찾을 수 없습니다</div>';return;}
   if(t.status!=='open'&&!session){$('#app').innerHTML=`<div class="survey-wrap"><div class="sv-card" style="text-align:center">
@@ -1960,12 +2110,27 @@ function prog(){
   const need=[...Object.values(SV.lect).flatMap(v=>[v.expert,v.practical]),SV.recommendLecture?1:0];
   const el=$('#svProg');if(el)el.style.width=Math.round(need.filter(Boolean).length/need.length*100)+'%';
 }
-function submitSurvey(){
+async function submitSurvey(){
   if(Object.values(SV.lect).some(v=>!v.expert||!v.practical)){toast('모든 강의의 필수 평가를 선택해주세요');return;}
   if(!SV.recommendLecture){toast('추천하고 싶은 강의를 1개 선택해주세요');return;}
-  DB.responses.push({id:'r'+Date.now(),trainingId:SV.tid,at:new Date().toISOString(),
-    lect:SV.lect,recommendLecture:SV.recommendLecture,need:SV.need.trim(),etc:SV.etc.trim()});
-  delete DB.ai[SV.tid];save();SV={};nav('#/done');
+  const resp={id:'r'+Date.now(),trainingId:SV.tid,at:new Date().toISOString(),
+    lect:SV.lect,recommendLecture:SV.recommendLecture,need:SV.need.trim(),etc:SV.etc.trim()};
+  // localStorage 저장
+  DB.responses.push(resp);
+  delete DB.ai[SV.tid];save();
+  // Supabase 저장
+  try{
+    await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/responses',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
+      body:JSON.stringify({
+        id:resp.id,training_id:resp.trainingId,lect:resp.lect,
+        recommend_lecture:resp.recommendLecture,need:resp.need,etc:resp.etc,
+        submitted_at:resp.at
+      })
+    });
+  }catch(e){console.warn('Supabase 저장 오류:',e);}
+  SV={};nav('#/done');
 }
 function renderAttend(tid){
   const t=byId(DB.trainings,tid);
@@ -1999,7 +2164,7 @@ function renderAttend(tid){
    <p style="text-align:center;font-size:.75rem;color:var(--ink4);margin-top:12px">제출하면 출석이 인정됩니다</p>
   </div>`;
 }
-function submitAttend(tid){
+async function submitAttend(tid){
   const empNo=$('#atEmpNo').value.trim();
   const name=$('#atName').value.trim();
   if(!empNo||!name){toast('사번과 성명을 모두 입력해 주세요');return;}
@@ -2009,8 +2174,17 @@ function submitAttend(tid){
   if(t.checkins.find(c=>c.empNo===empNo)){
     toast('이미 출석 등록된 사번입니다');return;
   }
-  t.checkins.push({empNo,name,at:new Date().toISOString()});
+  const checkin={empNo,name,at:new Date().toISOString()};
+  t.checkins.push(checkin);
   save();
+  // Supabase: training checkins 업데이트
+  try{
+    await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?id=eq.'+tid,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
+      body:JSON.stringify({checkins:t.checkins})
+    });
+  }catch(e){console.warn('출석 저장 오류:',e);}
   $('#app').innerHTML=`<div class="survey-wrap" style="padding-top:18vh"><div class="sv-card" style="text-align:center">
    <div style="font-size:2.8rem">✅</div>
    <div class="sv-title" style="margin-top:8px">출석이 완료되었습니다</div>
