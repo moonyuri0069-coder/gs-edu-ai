@@ -2,7 +2,6 @@
 <html lang="ko" data-theme="light">
 <head>
 <meta charset="UTF-8">
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GS더프레시 AI 교육만족도 분석 시스템</title>
 <style>
@@ -666,23 +665,30 @@ function chDonut(val,{size=150,color='var(--green-b)',label=''}={}){
    <text x="75" y="94" text-anchor="middle" font-size="10.5" fill="var(--ink3)" font-weight="700">${label}</text></svg>`;
 }
 function drawQR(canvas,text){
-  if(typeof QRCode==='undefined'){
-    setTimeout(()=>drawQR(canvas,text),300);return;
+  // canvas를 img 태그로 교체하여 QR 표시
+  const size=canvas.width||200;
+  const apiUrl='https://api.qrserver.com/v1/create-qr-code/?size='+size+'x'+size+'&data='+encodeURIComponent(text)+'&margin=10&format=png';
+  // canvas 부모에 img 삽입
+  const img=document.createElement('img');
+  img.src=apiUrl;
+  img.width=size;img.height=size;
+  img.style.cssText='display:block;border-radius:4px';
+  img.onerror=()=>{
+    // API 실패 시 URL 텍스트로 대체
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#f0f4f1';ctx.fillRect(0,0,size,size);
+    ctx.fillStyle='#0e5a34';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText('QR 로드 실패',size/2,size/2-10);
+    ctx.fillText('URL을 직접 사용하세요',size/2,size/2+10);
+  };
+  if(canvas.parentNode){
+    canvas.style.display='none';
+    // 기존 img 있으면 제거
+    const old=canvas.parentNode.querySelector('img.qr-img');
+    if(old)old.remove();
+    img.classList.add('qr-img');
+    canvas.parentNode.insertBefore(img,canvas);
   }
-  try{
-    QRCode.toDataURL(text,{width:200,margin:1,color:{dark:'#111',light:'#fff'}},
-      (err,url)=>{
-        if(err){console.warn('QR 오류:',err);return;}
-        const ctx=canvas.getContext('2d');
-        const img=new Image();
-        img.onload=()=>{
-          canvas.width=200;canvas.height=200;
-          ctx.drawImage(img,0,0,200,200);
-        };
-        img.src=url;
-      }
-    );
-  }catch(e){console.warn('QR 생성 오류:',e);}
 }
 function csv(rows,name){
   const body=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
@@ -1175,7 +1181,7 @@ function openQR(id){
       
     </div></div>`,
    `<button class="btn" onclick="closeModal()">닫기</button>`);
-  setTimeout(()=>drawQR($('#qrC'),url),100);
+  setTimeout(()=>drawQR($('#qrC'),url),50);
 }
 
 /* ═══════════ 강사관리 ═══════════ */
