@@ -7,6 +7,7 @@ const SUPA_URL='https://eldpjvlefuhyfacrmwsl.supabase.co';
 const SUPA_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GS더프레시 AI 교육만족도 분석 시스템</title>
 <style>
@@ -670,14 +671,13 @@ function chDonut(val,{size=150,color='var(--green-b)',label=''}={}){
    <text x="75" y="94" text-anchor="middle" font-size="10.5" fill="var(--ink3)" font-weight="700">${label}</text></svg>`;
 }
 function drawQR(canvas,text){
-  const n=25,s=6;canvas.width=n*s;canvas.height=n*s;const ctx=canvas.getContext('2d');
-  ctx.fillStyle='#fff';ctx.fillRect(0,0,n*s,n*s);ctx.fillStyle='#111';
-  let hsh=0;for(const ch of text){hsh=(hsh*31+ch.charCodeAt(0))>>>0;}
-  let x=hsh||7;const rnd=()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return(x>>>0)/4294967296;};
-  for(let i=0;i<n;i++)for(let j=0;j<n;j++){if(rnd()<.46)ctx.fillRect(i*s,j*s,s,s);}
-  const F=(cx,cy)=>{ctx.fillStyle='#111';ctx.fillRect(cx,cy,7*s,7*s);ctx.fillStyle='#fff';ctx.fillRect(cx+s,cy+s,5*s,5*s);ctx.fillStyle='#111';ctx.fillRect(cx+2*s,cy+2*s,3*s,3*s);};
-  ctx.fillStyle='#fff';ctx.fillRect(0,0,8*s,8*s);ctx.fillRect((n-8)*s,0,8*s,8*s);ctx.fillRect(0,(n-8)*s,8*s,8*s);
-  F(0,0);F((n-7)*s,0);F(0,(n-7)*s);
+  if(typeof QRCode==='undefined'){
+    // QRCode.js 로드 전 fallback
+    setTimeout(()=>drawQR(canvas,text),500);return;
+  }
+  QRCode.toCanvas(canvas,text,{width:canvas.width||200,margin:1,
+    color:{dark:'#111111',light:'#ffffff'}},
+    err=>{if(err)console.warn('QR 오류:',err);});
 }
 function csv(rows,name){
   const body=rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
@@ -1030,7 +1030,7 @@ function toggleClose(id){const t=byId(DB.trainings,id);t.status=t.status==='open
   toast(t.status==='open'?'응답을 재개했습니다':'응답을 마감했습니다');}
 let LECT_DRAFT=[];let ATT_DRAFT=[];
 function openTrainingModal(){
-  LECT_DRAFT=[{title:'',slot:'',instructorId:DB.instructors[0]?.id}];
+  LECT_DRAFT=[{title:'',slot:'',instructorId:'',instructorName:''}];
   ATT_DRAFT=[];
   openModal('새 교육 만들기',`
    <div class="fld-group"><label class="fld">교육명 *</label><input class="input" id="fName" placeholder="예) 26년 부점장 향상 과정"></div>
@@ -1073,12 +1073,13 @@ function renderLectRows(){
       oninput="LECT_DRAFT[${i}].slot=this.value">
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강의명" value="${esc(L.title)}"
       oninput="LECT_DRAFT[${i}].title=this.value">
-    <select class="select" style="font-size:.78rem;padding:7px 8px" onchange="LECT_DRAFT[${i}].instructorId=this.value">
-      ${DB.instructors.map(x=>`<option value="${x.id}" ${L.instructorId===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+    <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강사명" 
+      value="${esc(L.instructorName||byId(DB.instructors,L.instructorId)?.name||'')}"
+      oninput="LECT_DRAFT[${i}].instructorName=this.value;LECT_DRAFT[${i}].instructorId=''">
     <button class="btn sm ghost" style="padding:4px 6px" onclick="LECT_DRAFT.splice(${i},1);renderLectRows()">✕</button>
    </div>`).join('');
 }
-function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:DB.instructors[0]?.id});renderLectRows();}
+function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:'',instructorName:''});renderLectRows();}
 function renderAttRows(){
   $('#attList').innerHTML=ATT_DRAFT.map((a,i)=>`
    <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:6px;align-items:center">
@@ -1120,7 +1121,22 @@ function uploadAttExcel(e){
 function saveTraining(){
   const name=$('#fName').value.trim(),date=$('#fDate').value;
   if(!name||!date){toast('교육명과 교육일을 입력해주세요');return;}
-  const lectures=LECT_DRAFT.filter(L=>L.title.trim()).map((L,i)=>({id:'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:L.instructorId}));
+  const lectures=LECT_DRAFT.filter(L=>L.title.trim()).map((L,i)=>{
+    let iid=L.instructorId;
+    const iname=(L.instructorName||'').trim();
+    if(!iid&&iname){
+      // 이름으로 기존 강사 찾기
+      const existing=DB.instructors.find(x=>x.name===iname);
+      if(existing){iid=existing.id;}
+      else{
+        // 새 강사 자동 등록
+        iid='i'+Date.now()+'_'+i;
+        DB.instructors.push({id:iid,name:iname,field:'',bio:''});
+        sbUpsert('instructors',{id:iid,name:iname,field:'',bio:''});
+      }
+    }
+    return {id:'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname};
+  });
   if(!lectures.length){toast('강의를 1개 이상 등록해주세요');return;}
   const attendees=ATT_DRAFT.filter(a=>a.name.trim());
   const id='t'+Date.now();
@@ -1142,7 +1158,7 @@ function openQR(id){
   const t=byId(DB.trainings,id);
   const url=`${location.origin||'file://'}${location.pathname}#/s/${id}`;
   openModal('QR코드 · 설문 URL',`
-   <div class="qrbox"><canvas id="qrC"></canvas>
+   <div class="qrbox"><canvas id="qrC" width="200" height="200"></canvas>
     <div style="min-width:0">
       <div style="font-weight:800">${esc(t.name)} ${t.round}차</div>
       <div class="card-sub">${t.date} · ${t.type} · 강의 ${t.lectures.length}개</div>
@@ -1901,7 +1917,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
     return `<div style="width:100%;height:100%;background:${COLORS.bg0};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif">
       <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:${COLORS.accent0};letter-spacing:-.02em">교육 출석 안내</div>
       <div style="background:#fff;border-radius:16px;padding:28px 40px;display:flex;gap:40px;align-items:center;box-shadow:0 2px 16px rgba(0,0,0,.08);max-width:80%">
-        <div><canvas id="qrAttend" width="180" height="180"></canvas></div>
+        <div><canvas id="qrAttend" width="200" height="200"></canvas></div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <div style="font-size:clamp(.9rem,2vw,1.3rem);font-weight:800;color:#222">QR코드를 스캔하여<br>출석 등록을 진행해 주시기 바랍니다.</div>
           <div style="display:flex;flex-direction:column;gap:6px;color:#444;font-size:clamp(.75rem,1.5vw,1rem)">
