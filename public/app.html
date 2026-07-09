@@ -1060,7 +1060,7 @@ function openEditTraining(tid){
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">강의 구성</label>
     <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
-      <span>시간대</span><span>강의명</span><span>강사</span><span></span></div>
+      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
     <div id="lectList"></div>
     <button class="btn sm" style="margin-top:6px" onclick="addLectRow()">＋ 강의 추가</button></div>
    <div class="divider"></div>
@@ -1068,7 +1068,14 @@ function openEditTraining(tid){
     <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
       <span>팀</span><span>점포명</span><span>성명</span><span></span></div>
     <div id="attList"></div>
-    <button class="btn sm" style="margin-top:6px" onclick="addAttRow()">＋ 참석자 추가</button></div>`,
+    <div class="row" style="margin-top:8px;gap:6px;align-items:center">
+      <button class="btn sm" onclick="addAttRow()">＋ 직접 추가</button>
+      <label class="btn sm" style="cursor:pointer;margin:0">
+        📂 엑셀 업로드
+        <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadAttExcel(event)">
+      </label>
+      <span class="card-sub">Excel 형식: 팀 | 점포명 | 성명</span>
+    </div></div>`,
    `<button class="btn" onclick="closeModal()">취소</button>
     <button class="btn primary" onclick="saveEditTraining('${tid}')">저장</button>`);
   renderLectRows();renderAttRows();
@@ -1087,7 +1094,9 @@ async function saveEditTraining(tid){
       if(existing){iid=existing.id;}
       else{iid='i'+Date.now()+'_'+i;DB.instructors.push({id:iid,name:iname,field:'',bio:''});sbUpsert('instructors',{id:iid,name:iname,field:'',bio:''});}
     }
-    return {id:L.id||'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname};
+    // 강사 field 업데이트
+    if(iid&&L.field){const ins=byId(DB.instructors,iid);if(ins&&!ins.field)ins.field=L.field;}
+    return {id:L.id||'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||''};
   });
   t.name=name;t.date=date;t.round=+$('#fRound').value||1;
   t.type=$('#fType').value;t.place=$('#fPlace').value.trim()||'미정';
@@ -1101,7 +1110,7 @@ async function saveEditTraining(tid){
 }
 
 function openTrainingModal(){
-  LECT_DRAFT=[{title:'',slot:'',instructorId:'',instructorName:''}];
+  LECT_DRAFT=[{title:'',slot:'',instructorId:'',instructorName:'',field:''}];
   ATT_DRAFT=[];
   openModal('새 교육 만들기',`
    <div class="fld-group"><label class="fld">교육명 *</label><input class="input" id="fName" placeholder="예) 26년 부점장 향상 과정"></div>
@@ -1117,7 +1126,7 @@ function openTrainingModal(){
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">강의 구성 * <span style="font-weight:400;color:var(--ink3)">— 설문에 이 순서로 반복됩니다. 시간대는 보고서에 표시됩니다.</span></label>
     <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
-      <span>시간대</span><span>강의명</span><span>강사</span><span></span></div>
+      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
     <div id="lectList"></div>
     <button class="btn sm" style="margin-top:6px" onclick="addLectRow()">＋ 강의 추가</button></div>
    <div class="divider"></div>
@@ -1139,18 +1148,20 @@ function openTrainingModal(){
 }
 function renderLectRows(){
   $('#lectList').innerHTML=LECT_DRAFT.map((L,i)=>`
-   <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:6px;align-items:center">
+   <div style="display:grid;grid-template-columns:100px 1fr 90px 90px 28px;gap:6px;margin-bottom:6px;align-items:center">
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="09:00~10:00" value="${esc(L.slot||'')}"
       oninput="LECT_DRAFT[${i}].slot=this.value">
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강의명" value="${esc(L.title)}"
       oninput="LECT_DRAFT[${i}].title=this.value">
+    <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="사업기획팀" value="${esc(L.field||byId(DB.instructors,L.instructorId)?.field||'')}"
+      oninput="LECT_DRAFT[${i}].field=this.value">
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강사명" 
       value="${esc(L.instructorName||byId(DB.instructors,L.instructorId)?.name||'')}"
       oninput="LECT_DRAFT[${i}].instructorName=this.value;LECT_DRAFT[${i}].instructorId=''">
     <button class="btn sm ghost" style="padding:4px 6px" onclick="LECT_DRAFT.splice(${i},1);renderLectRows()">✕</button>
    </div>`).join('');
 }
-function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:'',instructorName:''});renderLectRows();}
+function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:'',instructorName:'',field:''});renderLectRows();}
 function renderAttRows(){
   $('#attList').innerHTML=ATT_DRAFT.map((a,i)=>`
    <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:6px;align-items:center">
@@ -1206,7 +1217,8 @@ function saveTraining(){
         sbUpsert('instructors',{id:iid,name:iname,field:'',bio:''});
       }
     }
-    return {id:'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname};
+    if(iid&&L.field){const ins=byId(DB.instructors,iid);if(ins&&!ins.field)ins.field=L.field;}
+    return {id:'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||''};
   });
   if(!lectures.length){toast('강의를 1개 이상 등록해주세요');return;}
   const attendees=ATT_DRAFT.filter(a=>a.name.trim());
@@ -2128,7 +2140,7 @@ function renderAgendaDoc(t){
       return `<tr>
         <td style="text-align:center;color:#555">${esc(L.slot||'-')}</td>
         <td style="font-weight:600">${esc(L.title)}</td>
-        <td style="text-align:center">${esc(ins?.field||'-')}</td>
+        <td style="text-align:center">${esc(L.field||ins?.field||'-')}</td>
         <td style="text-align:center">${esc(ins?.name||'-')}</td>
       </tr>`;
     }).join('')}</tbody>
@@ -2205,22 +2217,28 @@ let SV={};
 async function renderSurvey(tid){
   // Supabase에서 교육 데이터 로드 시도
   try{
-    const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?id=eq.'+tid+'&select=*',{
-      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
-    });
+    const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
+    const hdrs={'apikey':ANON,'Authorization':'Bearer '+ANON};
+    // 교육 로드
+    const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?id=eq.'+tid+'&select=*',{headers:hdrs});
     const data=await res.json();
     if(data&&data[0]){
       const t=data[0];
-      // DB에 없으면 추가
-      if(!byId(DB.trainings,tid)){
-        DB.trainings.push({
-          id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
-          place:t.place,invited:t.invited,status:t.status,
-          lectures:t.lectures||[],attendees:t.attendees||[],
-          budget:t.budget||[],checkins:t.checkins||[],subtitle:t.subtitle||''
+      const mapped={id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
+        place:t.place,invited:t.invited,status:t.status,
+        lectures:t.lectures||[],attendees:t.attendees||[],
+        budget:t.budget||[],checkins:t.checkins||[],subtitle:t.subtitle||''};
+      const ex=DB.trainings.findIndex(x=>x.id===tid);
+      if(ex>=0){DB.trainings[ex]=mapped;}else{DB.trainings.push(mapped);}
+      // 강사 로드
+      const ir=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/instructors?select=*',{headers:hdrs});
+      const instrs=await ir.json();
+      if(instrs&&instrs.length){
+        instrs.forEach(ins=>{
+          if(!DB.instructors.find(x=>x.id===ins.id))DB.instructors.push(ins);
         });
-        save();
       }
+      save();
     }
   }catch(e){console.warn('교육 로드 오류:',e);}
   
