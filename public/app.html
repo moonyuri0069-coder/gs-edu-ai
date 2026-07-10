@@ -205,7 +205,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
   border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
 .ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center}
+.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center!important}
 .ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4}
 .ag-table tr:nth-child(even) td{background:#f8faf7}
 .ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
@@ -228,11 +228,11 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
   padding:5px 10px;letter-spacing:.04em;text-align:center}
 .rp-section-body{padding:8px 10px;font-size:.78rem;background:#fff}
 .rp-sched{width:100%;border-collapse:collapse;font-size:.72rem}
-.rp-sched th{background:#e8f2ec;font-weight:800;padding:3px 6px;border:1px solid #cdd8cb;text-align:center;color:#0e5a34}
+.rp-sched th{background:#e8f2ec;font-weight:800;padding:3px 6px;border:1px solid #cdd8cb;text-align:center!important;color:#0e5a34}
 .rp-sched td{padding:3px 6px;border:1px solid #e4e7e2;vertical-align:top;line-height:1.3}
 .rp-sched .lunch{background:#fafafa;color:#999;text-align:center;font-style:italic}
 .rp-att{width:100%;border-collapse:collapse;font-size:.72rem}
-.rp-att th{background:#e8f2ec;font-weight:800;padding:3px 6px;border:1px solid #cdd8cb;text-align:center;color:#0e5a34}
+.rp-att th{background:#e8f2ec;font-weight:800;padding:3px 6px;border:1px solid #cdd8cb;text-align:center!important;color:#0e5a34}
 .rp-att td{padding:3px 6px;border:1px solid #e4e7e2;text-align:center}
 .rp-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 .rp-photo-ph{background:#f0f4f1;border-radius:4px;aspect-ratio:4/3;
@@ -253,7 +253,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
   padding:3px 10px;border-radius:4px;margin-bottom:6px;letter-spacing:.03em;display:inline-block}
 .rp-opinion-table{width:100%;border-collapse:collapse;font-size:.74rem}
 .rp-opinion-table th{background:#e8f2ec;color:#0e5a34;font-weight:800;padding:4px 8px;
-  border:1px solid #cdd8cb;text-align:center}
+  border:1px solid #cdd8cb;text-align:center!important}
 .rp-opinion-table td{padding:4px 8px;border:1px solid #e4e7e2;vertical-align:top;line-height:1.4}
 .rp-opinion-table td.lname{font-weight:700;color:#0e5a34;white-space:nowrap;font-size:.72rem}
 .rp-opinion-table ul{margin:0;padding-left:12px}
@@ -311,7 +311,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
   border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
 .ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center}
+.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center!important}
 .ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4}
 .ag-table tr:nth-child(even) td{background:#f8faf7}
 .ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
@@ -354,7 +354,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
   border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
 .ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center}
+.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center!important}
 .ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4}
 .ag-table tr:nth-child(even) td{background:#f8faf7}
 .ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
@@ -2005,7 +2005,14 @@ function vGuide(){
   if(!GUIDE_SEL&&trainings.length)GUIDE_SEL=trainings[0].id;
   // GUIDE_SEL이 있지만 DB에 없으면 첫번째로 초기화
   if(GUIDE_SEL&&!byId(DB.trainings,GUIDE_SEL)&&trainings.length)GUIDE_SEL=trainings[0].id;
-  const t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
+  let t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
+  // t가 없으면 Supabase에서 로드 후 재렌더
+  if(!t&&GUIDE_SEL){
+    syncFromSupabase().then(()=>{
+      t=byId(DB.trainings,GUIDE_SEL);
+      if(t)render();
+    });
+  }
 
   const attendUrl=`${location.origin||''}${location.pathname}#/attend/${GUIDE_SEL}`;
   const surveyUrl=`${location.origin||''}${location.pathname}#/s/${GUIDE_SEL}`;
@@ -2161,7 +2168,13 @@ function vAgenda(){
   const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
   if(!AQ&&list.length)AQ=list[0].id;
   if(AQ&&!byId(DB.trainings,AQ)&&list.length)AQ=list[0].id;
-  const t=AQ?byId(DB.trainings,AQ):null;
+  let t=AQ?byId(DB.trainings,AQ):null;
+  if(!t&&AQ){
+    syncFromSupabase().then(()=>{
+      t=byId(DB.trainings,AQ);
+      if(t)render();
+    });
+  }
   const sel=`<div class="card card-pad" style="margin-bottom:14px">
     <div class="spread" style="flex-wrap:wrap;gap:10px">
       <div>
