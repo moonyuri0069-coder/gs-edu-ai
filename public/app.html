@@ -205,7 +205,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
   border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
 .ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:left}
+.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center}
 .ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4}
 .ag-table tr:nth-child(even) td{background:#f8faf7}
 .ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
@@ -253,7 +253,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
   padding:3px 10px;border-radius:4px;margin-bottom:6px;letter-spacing:.03em;display:inline-block}
 .rp-opinion-table{width:100%;border-collapse:collapse;font-size:.74rem}
 .rp-opinion-table th{background:#e8f2ec;color:#0e5a34;font-weight:800;padding:4px 8px;
-  border:1px solid #cdd8cb;text-align:left}
+  border:1px solid #cdd8cb;text-align:center}
 .rp-opinion-table td{padding:4px 8px;border:1px solid #e4e7e2;vertical-align:top;line-height:1.4}
 .rp-opinion-table td.lname{font-weight:700;color:#0e5a34;white-space:nowrap;font-size:.72rem}
 .rp-opinion-table ul{margin:0;padding-left:12px}
@@ -311,7 +311,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
   border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
 .ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:left}
+.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center}
 .ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4}
 .ag-table tr:nth-child(even) td{background:#f8faf7}
 .ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
@@ -354,7 +354,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
   border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
 .ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:left}
+.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center}
 .ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4}
 .ag-table tr:nth-child(even) td{background:#f8faf7}
 .ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
@@ -1999,6 +1999,8 @@ function vGuide(){
     DB.trainings.filter(t=>t.status!=='open').sort((a,b)=>a.date<b.date?1:-1)
   );
   if(!GUIDE_SEL&&trainings.length)GUIDE_SEL=trainings[0].id;
+  // GUIDE_SEL이 있지만 DB에 없으면 첫번째로 초기화
+  if(GUIDE_SEL&&!byId(DB.trainings,GUIDE_SEL)&&trainings.length)GUIDE_SEL=trainings[0].id;
   const t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
 
   const attendUrl=`${location.origin||''}${location.pathname}#/attend/${GUIDE_SEL}`;
@@ -2013,12 +2015,12 @@ function vGuide(){
     <div class="spread" style="flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-weight:800;margin-bottom:6px">교육 선택</div>
-        <select class="select" style="min-width:280px" onchange="GUIDE_SEL=this.value;GUIDE_SLIDE=0;rerender()">
+        <select class="select" style="min-width:280px" onchange="GUIDE_SEL=this.value;GUIDE_SLIDE=0;render()">
           ${trainings.map(tr=>`<option value="${tr.id}" ${GUIDE_SEL===tr.id?'selected':''}>${esc(tr.name)} ${tr.round}차 (${tr.date}) ${tr.status==='open'?'🟢':''}</option>`).join('')}
         </select>
       </div>
       <div class="row" style="gap:6px">
-        ${slides.map((s,i)=>`<button class="btn ${GUIDE_SLIDE===i?'primary':'sm'}" onclick="GUIDE_SLIDE=${i};rerender()">${s}</button>`).join('')}
+        ${slides.map((s,i)=>`<button class="btn ${GUIDE_SLIDE===i?'primary':'sm'}" onclick="GUIDE_SLIDE=${i};render()">${s}</button>`).join('')}
       </div>
       <button class="btn primary" onclick="openSlideFullscreen()" style="gap:6px">
         ⛶ 전체화면
@@ -2237,7 +2239,7 @@ function renderAgendaDoc(t){
     ${session?`<button class="btn sm" style="margin-left:10px" onclick="openBudget(AQ)">💰 비용 입력</button>`:''}
   </div>
   <table class="ag-table">
-    <thead><tr><th>예산 항목</th><th style="width:22%;text-align:right">예산(원)</th><th>상세</th><th style="width:12%">비고</th></tr></thead>
+    <thead><tr><th>예산 항목</th><th style="width:22%;text-align:center">예산(원)</th><th>상세</th><th style="width:12%">비고</th></tr></thead>
     <tbody>
       ${BUDGET.map(b=>`<tr>
         <td style="font-weight:600">${esc(b.item)}</td>
