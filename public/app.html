@@ -475,9 +475,12 @@ let DB;
 function load(){
   try{
     const raw=localStorage.getItem(LS_KEY);
-    if(raw){DB=JSON.parse(raw);}
-    else{
-      // 빈 DB로 시작 (실서비스)
+    if(raw){
+      DB=JSON.parse(raw);
+      // 시드 데이터(t1~t6) 제거
+      DB.trainings=DB.trainings.filter(t=>!t.id.match(/^t[1-6]$/));
+      DB.responses=DB.responses.filter(r=>!r.trainingId.match(/^t[1-6]$/));
+    }else{
       DB={trainings:[],instructors:[],responses:[],ai:{},theme:'light'};
     }
   }catch(e){
@@ -717,6 +720,10 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  guide:['교육생안내','출석QR · 일정안내 · 만족도QR — 16:9 교육용 화면'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
+// 세션 복구 시 Supabase 동기화
+if(session){
+  setTimeout(()=>syncFromSupabase().then(()=>render()),100);
+}
 function nav(hash){location.hash=hash;}
 window.addEventListener('hashchange',render);
 function render(){
