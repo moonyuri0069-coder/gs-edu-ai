@@ -900,8 +900,11 @@ function kpi(label,val,unit,sub,tone='flat'){
 }
 
 /* ═══════════ Dashboard ═══════════ */
+let DASH_YEAR=''; // 대시보드 연도 필터
 function vDash(){
-  const T=DB.trainings,R=DB.responses;
+  const years=[...new Set(DB.trainings.map(t=>t.date.slice(0,4)))].sort().reverse();
+  const T=(DASH_YEAR?DB.trainings.filter(t=>t.date.startsWith(DASH_YEAR)):DB.trainings);
+  const R=DB.responses.filter(r=>T.find(t=>t.id===r.trainingId));
   const totalAvg=avg(T.filter(t=>respOf(t.id).length).map(t=>trainingAvg(t.id)));
   const ranked=T.filter(t=>respOf(t.id).length>=4).map(t=>({t,v:trainingAvg(t.id)})).sort((a,b)=>b.v-a.v);
   const best=ranked[0],worst=ranked[ranked.length-1];
@@ -942,9 +945,21 @@ function vTrainings(){
   return `<div class="spread" style="margin-bottom:14px">
     <div class="card-sub">교육에 <b>강의(강의명+강사)</b>를 등록하면 설문의 강의별 평가가 자동 구성됩니다.</div>
     <button class="btn primary" onclick="openTrainingModal()">＋ 새 교육 만들기</button></div>
-  <div class="card" style="overflow-x:auto"><table class="tbl"><thead><tr>
-    <th>교육명</th><th>교육일</th><th>차수</th><th>유형</th><th>강의 구성</th><th>응답</th><th>상태</th><th style="width:230px">작업</th></tr></thead>
-   <tbody>${DB.trainings.slice().reverse().map(t=>{
+  <div class="card" style="overflow-x:auto"><table class="tbl">${(()=>{
+  const tth=(key,label)=>{
+    const on=TQ_SORT.key===key;
+    const arr=on?(TQ_SORT.dir===1?'↑':'↓'):'↕';
+    return `<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="TQ_SORT.dir=TQ_SORT.key==='${key}'&&TQ_SORT.dir===1?-1:1;TQ_SORT.key='${key}';render()">
+      ${label}<span style="color:${on?'var(--green)':'var(--ink4)'};font-size:.82em;margin-left:3px">${arr}</span></th>`;
+  };
+  return `<thead><tr>
+    ${tth('name','교육명')}${tth('date','교육일')}<th>차수</th><th>유형</th><th>강의 구성</th><th>응답</th><th>상태</th><th style="width:230px">작업</th></tr></thead>`;
+})()}
+   <tbody>${DB.trainings.slice().sort((a,b)=>{
+  if(TQ_SORT.key==='name')return TQ_SORT.dir*(a.name<b.name?-1:a.name>b.name?1:0);
+  if(TQ_SORT.key==='date')return TQ_SORT.dir*(a.date<b.date?-1:a.date>b.date?1:0);
+  return 0;
+}).map(t=>{
      const n=respOf(t.id).length;
      return `<tr><td style="font-weight:700">${esc(t.name)}</td><td class="num">${t.date}</td><td class="num">${t.round}차</td>
      <td><span class="badge gray">${t.type}</span></td>
@@ -1226,16 +1241,24 @@ function saveTraining(){
   DB.trainings.push({id,name,date,round:+$('#fRound').value||1,type:$('#fType').value,
     place:$('#fPlace').value.trim()||'미정',invited:+$('#fInvited').value||15,
     lectures,attendees,budget:[],checkins:[],subtitle:'',status:'open',createdAt:new Date().toISOString().slice(0,10)});
-  closeModal();save();
-  // Supabase 저장
+  // Supabase 저장 (closeModal 전에!)
+  const newT=DB.trainings.at(-1);
   fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings',{
-    method:'POST',headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
-    body:JSON.stringify({id,name,date,round:+$('#fRound').value||1,type:$('#fType').value,
-      place:$('#fPlace').value.trim()||'미정',invited:+$('#fInvited').value||15,
-      lectures:DB.trainings.at(-1).lectures,attendees:DB.trainings.at(-1).attendees||[],
-      budget:[],checkins:[],status:'open'})
-  }).catch(e=>console.warn(e));
-  render();openQR(id);toast('교육이 생성되었습니다 — QR과 설문 URL이 준비됐어요');
+    method:'POST',
+    headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM',
+      'Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
+    body:JSON.stringify({
+      id:newT.id,name:newT.name,date:newT.date,round:newT.round,
+      type:newT.type,place:newT.place,invited:newT.invited,
+      lectures:newT.lectures,attendees:newT.attendees||[],
+      budget:[],checkins:[],status:'open'
+    })
+  }).then(r=>{
+    if(!r.ok)r.text().then(t=>console.warn('저장오류:',t));
+    else console.log('Supabase 교육 저장 완료');
+  }).catch(e=>console.warn('저장실패:',e));
+  closeModal();save();
+  render();openQR(newT.id);toast('교육이 생성되었습니다 — QR과 설문 URL이 준비됐어요');
 }
 function openQR(id){
   const t=byId(DB.trainings,id);
@@ -1257,6 +1280,7 @@ function openQR(id){
 }
 
 /* ═══════════ 강사관리 ═══════════ */
+let TQ_SORT={key:'date',dir:-1}; // 교육관리 정렬
 let INSTR_SORT={key:'n',dir:-1}; // 초기: 강의 횟수 내림차순
 let INSTR_DATE={from:'',to:''}; // 강사 기간 필터
 function vInstructors(){
@@ -1811,8 +1835,24 @@ function vReport(){
   <div class="rp-section-box" style="margin-bottom:8px">
     <div class="rp-section-head">교육 사진</div>
     <div class="rp-section-body">
-      <div class="rp-photos-full">${[...Array(6)].map((_,i)=>`<div class="rp-photo-ph-sm">📷 사진 ${i+1}</div>`).join('')}</div>
-      <div style="font-size:.65rem;color:#aaa">* 실서비스에서 교육 사진 자동 표시</div>
+      <div class="rp-photos-full">
+        ${[...Array(6)].map((_,pi)=>{
+          const ph=(t.photos||[])[pi];
+          return ph
+            ? `<div style="position:relative;aspect-ratio:4/3">
+                <img src="${ph}" style="width:100%;height:100%;object-fit:cover;border-radius:4px">
+                ${session?`<button onclick="removePhoto('${t.id}',${pi})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center">✕</button>`:''}
+              </div>`
+            : session
+              ? `<label style="cursor:pointer;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:#f0f4f1;border-radius:4px;border:1.5px dashed #cdd8cb;flex-direction:column;gap:4px">
+                  <span style="font-size:1.2rem">📷</span>
+                  <span style="font-size:.6rem;color:#aaa">사진 ${pi+1} 추가</span>
+                  <input type="file" accept="image/*" style="display:none" onchange="addPhoto('${t.id}',${pi},this)">
+                </label>`
+              : `<div class="rp-photo-ph-sm">📷 ${pi+1}</div>`;
+        }).join('')}
+      </div>
+      ${session?'<div style="font-size:.65rem;color:#888;margin-top:4px">📷 클릭하여 사진 추가 (JPG/PNG)</div>':''}
     </div>
   </div>
   <div class="rp-kpi-row">
@@ -1874,6 +1914,27 @@ function vReport(){
   </div>
   <div class="rp-page-end">- 2/2 -</div>
   </div>`;
+}
+function addPhoto(tid, idx, input){
+  const file=input.files[0]; if(!file)return;
+  if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const t=byId(DB.trainings,tid);
+    if(!t.photos)t.photos=[];
+    t.photos[idx]=e.target.result;
+    // Supabase 저장
+    sbPatch('trainings',tid,{photos:t.photos});
+    save();render();toast('사진이 추가되었습니다');
+  };
+  reader.readAsDataURL(file);
+}
+function removePhoto(tid,idx){
+  const t=byId(DB.trainings,tid);
+  if(!t.photos)return;
+  t.photos[idx]=null;
+  sbPatch('trainings',tid,{photos:t.photos});
+  save();render();toast('사진이 삭제되었습니다');
 }
 function printReport(){document.body.classList.add('print-report');window.print();
   setTimeout(()=>document.body.classList.remove('print-report'),400);}
@@ -2414,4 +2475,3 @@ load();applyTheme();render();
 </script>
 </body>
 </html>
-
