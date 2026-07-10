@@ -2276,6 +2276,11 @@ function vSettings(){
 /* ═══════════ 참여자 설문 (실제 설문지 구조) ═══════════ */
 let SV={};
 async function renderSurvey(tid){
+  // 로딩 화면 먼저 표시
+  $('#app').innerHTML=`<div class="survey-wrap"><div class="sv-card" style="text-align:center">
+    <div style="font-size:1.5rem;margin-bottom:10px">⏳</div>
+    <div class="sv-title">설문을 불러오는 중...</div>
+  </div></div>`;
   // Supabase에서 교육 데이터 로드 시도
   try{
     const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM';
@@ -2386,6 +2391,10 @@ async function submitSurvey(){
   SV={};nav('#/done');
 }
 async function renderAttend(tid){
+  $('#app').innerHTML=`<div class="survey-wrap"><div class="sv-card" style="text-align:center">
+    <div style="font-size:1.5rem;margin-bottom:10px">⏳</div>
+    <div class="sv-title">출석 등록 페이지 로딩 중...</div>
+  </div></div>`;
   if(!byId(DB.trainings,tid)){
     try{
       const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?id=eq.'+tid+'&select=*',{
