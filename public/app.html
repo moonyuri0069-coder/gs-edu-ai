@@ -754,6 +754,10 @@ function render(){
       <div class="content" id="content">${body()}</div>
     </div>
   </div>`;
+  // guide/agenda 페이지에서 DB 비어있으면 Supabase 동기화
+  if((page==='guide'||page==='agenda')&&!DB.trainings.length){
+    syncFromSupabase().then(()=>render());return;
+  }
   // 교육생안내 QR 캔버스 후처리
   if(page==='guide'){
     setTimeout(()=>{
@@ -2156,6 +2160,7 @@ let AQ=''; // 선택된 교육 ID
 function vAgenda(){
   const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
   if(!AQ&&list.length)AQ=list[0].id;
+  if(AQ&&!byId(DB.trainings,AQ)&&list.length)AQ=list[0].id;
   const t=AQ?byId(DB.trainings,AQ):null;
   const sel=`<div class="card card-pad" style="margin-bottom:14px">
     <div class="spread" style="flex-wrap:wrap;gap:10px">
