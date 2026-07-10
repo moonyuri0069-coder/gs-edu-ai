@@ -754,8 +754,8 @@ function render(){
       <div class="content" id="content">${body()}</div>
     </div>
   </div>`;
-  // guide/agenda 페이지에서 DB 비어있으면 Supabase 동기화
-  if((page==='guide'||page==='agenda')&&!DB.trainings.length){
+  // DB 비어있으면 Supabase 동기화 (세션 있을 때)
+  if(session&&!DB.trainings.length){
     syncFromSupabase().then(()=>render());return;
   }
   // 교육생안내 QR 캔버스 후처리
@@ -2005,14 +2005,7 @@ function vGuide(){
   if(!GUIDE_SEL&&trainings.length)GUIDE_SEL=trainings[0].id;
   // GUIDE_SEL이 있지만 DB에 없으면 첫번째로 초기화
   if(GUIDE_SEL&&!byId(DB.trainings,GUIDE_SEL)&&trainings.length)GUIDE_SEL=trainings[0].id;
-  let t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
-  // t가 없으면 Supabase에서 로드 후 재렌더
-  if(!t&&GUIDE_SEL){
-    syncFromSupabase().then(()=>{
-      t=byId(DB.trainings,GUIDE_SEL);
-      if(t)render();
-    });
-  }
+  const t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
 
   const attendUrl=`${location.origin||''}${location.pathname}#/attend/${GUIDE_SEL}`;
   const surveyUrl=`${location.origin||''}${location.pathname}#/s/${GUIDE_SEL}`;
@@ -2168,13 +2161,7 @@ function vAgenda(){
   const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
   if(!AQ&&list.length)AQ=list[0].id;
   if(AQ&&!byId(DB.trainings,AQ)&&list.length)AQ=list[0].id;
-  let t=AQ?byId(DB.trainings,AQ):null;
-  if(!t&&AQ){
-    syncFromSupabase().then(()=>{
-      t=byId(DB.trainings,AQ);
-      if(t)render();
-    });
-  }
+  const t=AQ?byId(DB.trainings,AQ):null;
   const sel=`<div class="card card-pad" style="margin-bottom:14px">
     <div class="spread" style="flex-wrap:wrap;gap:10px">
       <div>
