@@ -761,8 +761,8 @@ function render(){
       <div class="content" id="content">${body()}</div>
     </div>
   </div>`;
-  // DB 비어있으면 Supabase 동기화 (세션 있을 때)
-  if(session&&!DB.trainings.length){
+  // DB 비어있으면 Supabase 동기화 (세션 있을 때, 동기화 중이 아닐 때만)
+  if(session&&!DB.trainings.length&&!_syncing){
     syncFromSupabase().then(()=>render());return;
   }
   // 교육생안내 QR 캔버스 후처리
@@ -801,7 +801,10 @@ async function sbPatch(table, id, data){
   }catch(e){console.warn('Supabase 업데이트 오류:',e);}
 }
 
+let _syncing=false;
 async function syncFromSupabase(){
+  if(_syncing)return;
+  _syncing=true;
   try{
     // 교육 목록 동기화
     const tr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?select=*&order=date.desc',{
@@ -848,8 +851,10 @@ async function syncFromSupabase(){
       });
     }
     save();
-    toast('✅ 데이터 동기화 완료');
+    _syncing=false;
+    console.log('동기화 완료');
   }catch(e){
+    _syncing=false;
     console.warn('동기화 오류:',e);
     toast('동기화 실패 — 로컬 데이터로 표시합니다');
   }
