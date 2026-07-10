@@ -914,6 +914,17 @@ function vDash(){
   const typeVals=TYPES.map(tp=>({tp,v:avg(T.filter(t=>t.type===tp&&respOf(t.id).length).map(t=>trainingAvg(t.id)))})).filter(x=>x.v);
   const iStats=DB.instructors.map(i=>({i,v:instructorStat(i.id).avg})).filter(x=>x.v).sort((a,b)=>b.v-a.v);
   return `
+  <div class="card card-pad" style="margin-bottom:14px">
+    <div class="row" style="gap:8px;align-items:center">
+      <b style="font-size:.9rem">연도 필터</b>
+      <select class="select" style="width:120px" onchange="DASH_YEAR=this.value;render()">
+        <option value="">전체 기간</option>
+        ${years.map(y=>`<option value="${y}" ${DASH_YEAR===y?'selected':''}>${y}년</option>`).join('')}
+      </select>
+      ${DASH_YEAR?`<span class="badge green">${DASH_YEAR}년 기준</span>`:''}
+      <span class="card-sub">${T.length}개 교육 · ${R.length}개 응답</span>
+    </div>
+  </div>
   <div class="grid g4">
     ${kpi('총 교육수',T.length,'개','올해 누적')}
     ${kpi('총 응답자',R.length,'명','전체 설문 응답')}
@@ -2288,6 +2299,7 @@ async function renderSurvey(tid){
     // 교육 로드
     const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?id=eq.'+tid+'&select=*',{headers:hdrs});
     const data=await res.json();
+    console.log('Supabase 응답:', tid, data);
     if(data&&data[0]){
       const t=data[0];
       const mapped={id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
