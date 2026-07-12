@@ -514,11 +514,12 @@ function instructorStat(iid,fromD,toD){
   DB.trainings.forEach(t=>{
     if(fromD&&t.date<fromD)return;
     if(toD&&t.date>toD)return;
-    const hasLect=t.lectures.some(L=>L.instructorId===iid);
+    // 첫번째/마지막 강의 제외한 실제 강의 목록
+    const evalLects=t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1);
+    const hasLect=evalLects.some(L=>L.instructorId===iid);
     if(!hasLect)return;
-    // 날짜별 1회 카운트
     if(!countedDates.has(t.date)){countedDates.add(t.date);n++;}
-    t.lectures.forEach(L=>{if(L.instructorId!==iid)return;
+    evalLects.forEach(L=>{if(L.instructorId!==iid)return;
       respOf(t.id).forEach(r=>{const v=r.lect[L.id];if(!v)return;ex.push(toScore(v.expert));pr.push(toScore(v.practical));
         (perT[t.id]=perT[t.id]||[]).push((v.expert+v.practical)/2);});});});
   const ins=byId(DB.instructors,iid);
@@ -2369,13 +2370,15 @@ async function renderSurvey(tid){
   if(t.status!=='open'&&!session){$('#app').innerHTML=`<div class="survey-wrap"><div class="sv-card" style="text-align:center">
     <div class="sv-title">응답이 마감되었습니다</div><div class="card-sub" style="margin-top:6px">${esc(t.name)} ${t.round}차 · 교육담당자에게 문의해주세요</div></div></div>`;return;}
   if(!SV.tid||SV.tid!==tid){
-    // 같은 강사 중복 강의 제거
+    // 첫번째/마지막 강의 제외 + 같은 강사 중복 제거
     const seenInstr=new Set();
-    const uniqueLects=t.lectures.filter(L=>{
-      const key=L.instructorId||L.instructorName||L.title;
-      if(seenInstr.has(key))return false;
-      seenInstr.add(key);return true;
-    });
+    const uniqueLects=t.lectures
+      .filter((_,i,arr)=>i>0&&i<arr.length-1) // 첫/마지막 제외
+      .filter(L=>{
+        const key=L.instructorId||L.instructorName||L.title;
+        if(seenInstr.has(key))return false;
+        seenInstr.add(key);return true;
+      });
     SV={tid,lect:{},recommendLecture:'',need:'',etc:'',lectures:uniqueLects};
     uniqueLects.forEach(L=>SV.lect[L.id]={expert:0,practical:0,good:'',improve:''});
   }
