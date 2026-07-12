@@ -509,13 +509,21 @@ function lectureAvg(tid,lid){const vs=respOf(tid).map(r=>r.lect[lid]).filter(Boo
     total:avg(vs.flatMap(v=>[v.expert,v.practical])),n:vs.length};}
 function instructorStat(iid,fromD,toD){
   let ex=[],pr=[],n=0;const perT={};
+  // 같은 날짜 강의는 1회로 카운트 (중복 제거)
+  const countedDates=new Set();
   DB.trainings.forEach(t=>{
     if(fromD&&t.date<fromD)return;
     if(toD&&t.date>toD)return;
-    t.lectures.forEach(L=>{if(L.instructorId!==iid)return;n++;
+    const hasLect=t.lectures.some(L=>L.instructorId===iid);
+    if(!hasLect)return;
+    // 날짜별 1회 카운트
+    if(!countedDates.has(t.date)){countedDates.add(t.date);n++;}
+    t.lectures.forEach(L=>{if(L.instructorId!==iid)return;
       respOf(t.id).forEach(r=>{const v=r.lect[L.id];if(!v)return;ex.push(toScore(v.expert));pr.push(toScore(v.practical));
         (perT[t.id]=perT[t.id]||[]).push((v.expert+v.practical)/2);});});});
-  return {n,expert:avg(ex),practical:avg(pr),avg:avg([...ex,...pr]),perT};
+  const ins=byId(DB.instructors,iid);
+  const finalN=(ins&&ins.manualCount!==undefined)?ins.manualCount:n;
+  return {n:finalN,expert:avg(ex),practical:avg(pr),avg:avg([...ex,...pr]),perT};
 }
 
 const GEMINI_KEY='AQ.Ab8RN6K3WVT1c56fBJzsFC4OHTZ7Tr1ub0oYrsmr3CTgjrxf_Q';
@@ -1063,6 +1071,19 @@ async function deleteAttendee(tid, idx){
   render(); toast('참석자가 삭제되었습니다');
 }
 
+function editLectCount(iid, current){
+  const v=prompt('강의 횟수를 입력해주세요 (현재: '+current+'회)', current);
+  if(v===null)return;
+  const n=parseInt(v);
+  if(isNaN(n)||n<0){toast('올바른 숫자를 입력해주세요');return;}
+  const ins=byId(DB.instructors,iid);
+  if(!ins)return;
+  ins.manualCount=n; // 수동 강의 횟수 오버라이드
+  save();
+  sbUpsert('instructors',{id:iid,name:ins.name,field:ins.field||'',bio:ins.bio||'',manual_count:n});
+  render();toast('강의 횟수가 수정되었습니다');
+}
+
 async function deleteInstructor(id){
   if(!confirm('이 강사를 삭제하시겠습니까?'))return;
   DB.instructors=DB.instructors.filter(i=>i.id!==id);
@@ -1361,7 +1382,11 @@ function vInstructors(){
     <tbody>${rows.map(({i,s})=>`<tr>
       <td style="font-weight:700;cursor:pointer" onclick="nav('#/instructors/${i.id}')">${esc(i.name)}</td>
       <td style="color:var(--ink2)">${esc(i.field)}</td>
-      <td class="num" style="font-weight:700">${s.n}<span style="color:var(--ink3);font-size:.85em">회</span></td>
+      <td class="num" style="font-weight:700">
+  <span style="cursor:pointer;border-bottom:1px dashed var(--ink3)" 
+    onclick="editLectCount('${i.id}',${s.n})">${s.n}</span>
+  <span style="color:var(--ink3);font-size:.85em">회</span>
+</td>
       <td class="num">${s.avg?`<span class="badge green">${f1(s.avg)}점</span>`:'<span class="badge gray">-</span>'}</td>
       <td class="num">${s.expert?f1(s.expert)+' <span style="color:var(--ink4);font-size:.8em">점</span>':'-'}</td>
       <td class="num">${s.practical?f1(s.practical)+' <span style="color:var(--ink4);font-size:.8em">점</span>':'-'}</td>
@@ -2343,8 +2368,17 @@ async function renderSurvey(tid){
   }
   if(t.status!=='open'&&!session){$('#app').innerHTML=`<div class="survey-wrap"><div class="sv-card" style="text-align:center">
     <div class="sv-title">응답이 마감되었습니다</div><div class="card-sub" style="margin-top:6px">${esc(t.name)} ${t.round}차 · 교육담당자에게 문의해주세요</div></div></div>`;return;}
-  if(!SV.tid||SV.tid!==tid){SV={tid,lect:{},recommendLecture:'',need:'',etc:''};
-    t.lectures.forEach(L=>SV.lect[L.id]={expert:0,practical:0,good:'',improve:''});}
+  if(!SV.tid||SV.tid!==tid){
+    // 같은 강사 중복 강의 제거
+    const seenInstr=new Set();
+    const uniqueLects=t.lectures.filter(L=>{
+      const key=L.instructorId||L.instructorName||L.title;
+      if(seenInstr.has(key))return false;
+      seenInstr.add(key);return true;
+    });
+    SV={tid,lect:{},recommendLecture:'',need:'',etc:'',lectures:uniqueLects};
+    uniqueLects.forEach(L=>SV.lect[L.id]={expert:0,practical:0,good:'',improve:''});
+  }
   const LIKERT_COLOR=['#e05252','#e0a832','#16a34a']; // 아쉬움/보통/만족
   const LIKERT_EMOJI=['😕','😐','😊'];
   const likert=(val,path)=>`<div class="likert">${LIKERT.map((lab,ix)=>{
