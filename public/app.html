@@ -720,9 +720,9 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  guide:['교육생안내','출석QR · 일정안내 · 만족도QR — 16:9 교육용 화면'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
-// 세션 복구 시 Supabase 동기화
-if(session){
-  setTimeout(()=>syncFromSupabase().then(()=>render()),100);
+// 세션 복구 시 1번만 Supabase 동기화
+if(session&&!DB.trainings.length){
+  setTimeout(()=>syncFromSupabase().then(()=>render()),200);
 }
 function nav(hash){location.hash=hash;}
 window.addEventListener('hashchange',render);
@@ -761,10 +761,7 @@ function render(){
       <div class="content" id="content">${body()}</div>
     </div>
   </div>`;
-  // DB 비어있으면 Supabase 동기화 (세션 있을 때, 동기화 중이 아닐 때만)
-  if(session&&!DB.trainings.length&&!_syncing){
-    syncFromSupabase().then(()=>render());return;
-  }
+
   // 교육생안내 QR 캔버스 후처리
   if(page==='guide'){
     setTimeout(()=>{
