@@ -1892,7 +1892,15 @@ function vResults(){
 }
 function vCourseDash(t){
   const rs=respOf(t.id);if(!rs.length)return '<div class="empty">아직 응답이 없습니다</div>';
-  const lstats=t.lectures.map(L=>({L,s:lectureAvg(t.id,L.id)}));
+  // lstats: 첫/마지막 제외 + 동일강사 중복 제거
+  const _seenL=new Set();
+  const lstats=t.lectures.filter((L,i,arr)=>{
+    if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
+    const k=L.instructorId||L.instructorName||L.title;
+    if(k&&_seenL.has(k))return false;
+    if(k)_seenL.add(k);
+    return true;
+  }).map(L=>({L,s:lectureAvg(t.id,L.id)}));
   const recCnt={};rs.forEach(r=>{if(r.recommendLecture)recCnt[r.recommendLecture]=(recCnt[r.recommendLecture]||0)+1;});
   const recTop=Object.entries(recCnt).sort((a,b)=>b[1]-a[1]);
   const bestL=recTop[0]?lectOf(t,recTop[0][0]):null;
@@ -2055,11 +2063,18 @@ function vReport(){
    <span class="card-sub">2페이지 · 실제 보고서 형식</span></div>`;
   if(!t)return sel+'<div class="empty">보고 가능한 교육이 없습니다</div>';
   const rs=respOf(t.id);const a=getAI(RPQ);
-  const lstats=t.lectures.map(L=>({L,s:lectureAvg(t.id,L.id)}));
+  // lstats: 첫/마지막 제외 + 동일강사 중복 제거
+  const _seenL=new Set();
+  const lstats=t.lectures.filter((L,i,arr)=>{
+    if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
+    const k=L.instructorId||L.instructorName||L.title;
+    if(k&&_seenL.has(k))return false;
+    if(k)_seenL.add(k);
+    return true;
+  }).map(L=>({L,s:lectureAvg(t.id,L.id)}));
   // 첫/마지막 제외한 강의만 평균
-  const evalStats=lstats.filter((_,i,arr)=>i>0&&i<arr.length-1);
-  // 응답 있는 강의만 평균 계산
-  const evalWithResp=evalStats.filter(x=>x.s.n>0);
+  // lstats가 이미 첫/마지막+중복 제거됨
+  const evalWithResp=lstats.filter(x=>x.s.n>0);
   const ex=avg(evalWithResp.map(x=>x.s.expert)),pr=avg(evalWithResp.map(x=>x.s.practical));
   const totalV=trainingAvg(RPQ),rate=trainingRate(t);
   const dayNames=['일','월','화','수','목','금','토'];
@@ -2121,7 +2136,7 @@ function lectOpinions(L){
         </div>
         <table class="rp-sched">
           <thead><tr><th>교육시간</th><th>과정명</th><th>교육팀</th><th>강사</th></tr></thead>
-          <tbody>${lstats.filter(({L},i,arr)=>i>0&&i<arr.length-1).map(({L})=>{const ins=byId(DB.instructors,L.instructorId);
+          <tbody>${lstats.map(({L})=>{const ins=byId(DB.instructors,L.instructorId);
             return `<tr><td style="color:#555;font-size:.73rem">${esc(L.slot||'')}</td>
             <td style="font-weight:700">${esc(L.title)}</td>
             <td>${esc(L.field||ins?.field||'')}</td><td>${esc(L.instructorName||ins?.name||'')}</td></tr>`;}).join('')}
@@ -2177,7 +2192,7 @@ function lectOpinions(L){
       <div class="rp-sec">강의별 주요 의견</div>
       <table class="rp-opinion-table">
         <thead><tr><th style="width:130px">교육명</th><th>의견</th></tr></thead>
-        <tbody>${lstats.filter(({L},i,arr)=>i>0&&i<arr.length-1).map(({L})=>{
+        <tbody>${lstats.map(({L})=>{
           const ins=byId(DB.instructors,L.instructorId);
           const{goods,imps}=lectOpinions(L);
           const all=[...goods.map((g,ix)=>({t:g,hi:ix===0})),...imps.map(g=>({t:g,hi:false}))];
@@ -2752,7 +2767,7 @@ async function renderSurvey(tid){
     </div>`;}).join('')}
    <div class="sv-card"><div class="sv-section">과정 전체 설문</div>
     <div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
-    ${(()=>{const seen=new Set();return t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1).filter(L=>{const k=L.instructorId||L.instructorName||'';if(k&&seen.has(k))return false;if(k)seen.add(k);return true;});})().map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog();document.querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">
+    ${(SV.lectures||lstats.map(x=>x.L)).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog();document.querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">
       <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}
     <div class="sv-q">${esc(t.name)}에서 추가로 필요한(듣고 싶은) 강의 콘텐츠는 무엇인가요?</div>
     <textarea class="input" rows="2" oninput="SV.need=this.value">${esc(SV.need)}</textarea>
