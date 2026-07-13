@@ -771,6 +771,15 @@ function render(){
     </div>
   </div>`;
 
+  // 결과보고서 사진 붙여넣기 리스너
+  if(page==='report'){
+    setTimeout(()=>{
+      document.removeEventListener('paste',_reportPhotoPasteHandler);
+      document.addEventListener('paste',_reportPhotoPasteHandler);
+    },100);
+  } else {
+    document.removeEventListener('paste',_reportPhotoPasteHandler);
+  }
   // 교육생안내 QR 캔버스 후처리
   if(page==='guide'){
     setTimeout(()=>{
@@ -1278,6 +1287,37 @@ function renderAttRows(){
    </div>`).join('');
 }
 function addAttRow(){ATT_DRAFT.push({team:'',store:'',name:''});renderAttRows();}
+
+// 모달 전역 Ctrl+V 핸들러
+function _modalPasteHandler(e){
+  const modal=document.getElementById('modal');
+  if(!modal||!modal.innerHTML)return;
+  // 이미지 붙여넣기 (사진)
+  const items=e.clipboardData?.items||[];
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      // 활성 사진 슬롯 찾기
+      const activeLabel=document.querySelector('.rp-photos-full label:focus, .rp-photos-full label:hover');
+      return; // 사진은 개별 핸들러에서 처리
+    }
+  }
+  // 텍스트 붙여넣기
+  const text=e.clipboardData?.getData('text');
+  if(!text)return;
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return;
+  // 탭으로 구분된 엑셀 데이터인지 확인
+  const hasTabs=lines[0].includes('\t');
+  if(!hasTabs)return;
+  // 강의 구성 모달인지 참석자 모달인지 판단
+  if(document.getElementById('lectList')){
+    e.preventDefault();
+    pasteLectData(e);
+  } else if(document.getElementById('attList')){
+    e.preventDefault();
+    pasteAttData(e);
+  }
+}
 
 function pasteLectData(e){
   const text=e.clipboardData?.getData('text');
@@ -2043,6 +2083,36 @@ function lectOpinions(L){
   <div class="rp-page-end">- 2/2 -</div>
   </div>`;
 }
+let _reportPhotoSlot=0; // 현재 선택된 사진 슬롯
+let _reportPhotoTid=''; // 현재 교육 ID
+
+function _reportPhotoPasteHandler(e){
+  if(!RPQ)return;
+  const items=e.clipboardData?.items||[];
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      e.preventDefault();
+      const file=item.getAsFile();
+      if(!file)return;
+      if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        const t=byId(DB.trainings,RPQ);
+        if(!t.photos)t.photos=[];
+        // 빈 슬롯 찾기
+        let slot=t.photos.findIndex(p=>!p);
+        if(slot===-1)slot=t.photos.length;
+        if(slot>=6){toast('사진은 최대 6장까지 가능합니다');return;}
+        t.photos[slot]=ev.target.result;
+        sbPatch('trainings',RPQ,{photos:t.photos});
+        save();render();toast(`📷 사진 ${slot+1} 추가되었습니다`);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+}
+
 function handlePhotoPaste(e, tid, idx){
   const items=e.clipboardData?.items;
   if(!items)return;
