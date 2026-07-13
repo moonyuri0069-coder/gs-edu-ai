@@ -2056,7 +2056,9 @@ function vReport(){
   if(!t)return sel+'<div class="empty">보고 가능한 교육이 없습니다</div>';
   const rs=respOf(t.id);const a=getAI(RPQ);
   const lstats=t.lectures.map(L=>({L,s:lectureAvg(t.id,L.id)}));
-  const ex=avg(lstats.map(x=>x.s.expert)),pr=avg(lstats.map(x=>x.s.practical));
+  // 첫/마지막 제외한 강의만 평균
+  const evalStats=lstats.filter((_,i,arr)=>i>0&&i<arr.length-1);
+  const ex=avg(evalStats.map(x=>x.s.expert)),pr=avg(evalStats.map(x=>x.s.practical));
   const totalV=trainingAvg(RPQ),rate=trainingRate(t);
   const dayNames=['일','월','화','수','목','금','토'];
   const dow=dayNames[new Date(t.date).getDay()]||'';
@@ -2120,7 +2122,7 @@ function lectOpinions(L){
           <tbody>${lstats.filter(({L},i,arr)=>i>0&&i<arr.length-1).map(({L})=>{const ins=byId(DB.instructors,L.instructorId);
             return `<tr><td style="color:#555;font-size:.73rem">${esc(L.slot||'')}</td>
             <td style="font-weight:700">${esc(L.title)}</td>
-            <td>${esc(ins?.field||'')}</td><td>${esc(ins?.name||'')}</td></tr>`;}).join('')}
+            <td>${esc(L.field||ins?.field||'')}</td><td>${esc(L.instructorName||ins?.name||'')}</td></tr>`;}).join('')}
           </tbody>
         </table>
       </div>
@@ -2703,7 +2705,8 @@ async function renderSurvey(tid){
     const uniqueLects=t.lectures
       .filter((_,i,arr)=>i>0&&i<arr.length-1) // 첫/마지막 제외
       .filter(L=>{
-        const key=L.instructorId||L.instructorName||L.title;
+        // 동일팀+동일강사 조합으로 중복 제거
+        const key=(L.field||'')+'__'+(L.instructorId||L.instructorName||L.title);
         if(seenInstr.has(key))return false;
         seenInstr.add(key);return true;
       });
