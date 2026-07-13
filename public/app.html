@@ -1123,7 +1123,14 @@ function openEditTraining(tid){
     <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
       <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
     <div id="lectList"></div>
-    <button class="btn sm" style="margin-top:6px" onclick="addLectRow()">＋ 강의 추가</button></div>
+    <div class="row" style="margin-top:6px;gap:6px;align-items:center">
+      <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
+      <label class="btn sm" style="cursor:pointer;margin:0">
+        📂 엑셀 업로드
+        <input type="file" accept=".csv" style="display:none" onchange="uploadLectExcel(event)">
+      </label>
+      <span class="card-sub">CSV: 시간대|강의명|교육팀|강사</span>
+    </div></div>
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">참석자</label>
     <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
@@ -1189,7 +1196,14 @@ function openTrainingModal(){
     <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
       <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
     <div id="lectList"></div>
-    <button class="btn sm" style="margin-top:6px" onclick="addLectRow()">＋ 강의 추가</button></div>
+    <div class="row" style="margin-top:6px;gap:6px;align-items:center">
+      <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
+      <label class="btn sm" style="cursor:pointer;margin:0">
+        📂 엑셀 업로드
+        <input type="file" accept=".csv" style="display:none" onchange="uploadLectExcel(event)">
+      </label>
+      <span class="card-sub">CSV: 시간대|강의명|교육팀|강사</span>
+    </div></div>
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">참석자 <span style="font-weight:400;color:var(--ink3)">— 보고서 참석자 목록에 자동 표시됩니다</span></label>
     <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
@@ -1223,6 +1237,34 @@ function renderLectRows(){
    </div>`).join('');
 }
 function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:'',instructorName:'',field:''});renderLectRows();}
+
+function uploadLectExcel(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const lines=ev.target.result.split(/\r?\n/).filter(l=>l.trim());
+    // 첫 행 헤더 감지 (숫자로 시작하지 않으면 헤더)
+    const start=lines[0]&&/^[0-9:]/i.test(lines[0].trim())?0:1;
+    const added=[];
+    for(let i=start;i<lines.length;i++){
+      const cols=lines[i].split(',').map(c=>c.replace(/^["']|["']$/g,'').trim());
+      if(cols.length>=2&&cols[1]){
+        added.push({
+          title:cols[1]||'',
+          slot:cols[0]||'',
+          field:cols[2]||'',
+          instructorName:cols[3]||'',
+          instructorId:''
+        });
+      }
+    }
+    LECT_DRAFT=[...LECT_DRAFT,...added];
+    renderLectRows();
+    toast(`✅ 강의 ${added.length}개 추가됨`);
+  };
+  reader.readAsText(file,'UTF-8');
+  e.target.value='';
+}
 function renderAttRows(){
   $('#attList').innerHTML=ATT_DRAFT.map((a,i)=>`
    <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:6px;align-items:center">
@@ -2419,7 +2461,7 @@ async function renderSurvey(tid){
     </div>`;}).join('')}
    <div class="sv-card"><div class="sv-section">과정 전체 설문</div>
     <div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
-    ${t.lectures.map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';renderSurvey('${tid}')">
+    ${t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog()">
       <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}
     <div class="sv-q">${esc(t.name)}에서 추가로 필요한(듣고 싶은) 강의 콘텐츠는 무엇인가요?</div>
     <textarea class="input" rows="2" oninput="SV.need=this.value">${esc(SV.need)}</textarea>
@@ -2470,7 +2512,10 @@ async function submitSurvey(){
         submitted_at:resp.at
       })
     });
-  }catch(e){console.warn('Supabase 저장 오류:',e);}
+  }catch(e){
+    console.warn('Supabase 저장 오류:',e);
+    toast('⚠️ 서버 저장 실패 - 로컬에는 저장됨');
+  }
   SV={};nav('#/done');
 }
 async function renderAttend(tid){
