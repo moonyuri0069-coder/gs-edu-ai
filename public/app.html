@@ -1131,7 +1131,11 @@ function openEditTraining(tid){
    <div class="fld-group"><label class="fld">강의 구성</label>
     <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
       <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
-    <div id="lectList" onpaste="pasteLectData(event)"></div>
+    <div id="lectList" onpaste="pasteLectData(event)"
+  ondragover="event.preventDefault();this.style.background='#e8f2ec'"
+  ondragleave="this.style.background=''"
+  ondrop="event.preventDefault();this.style.background='';dropExcelData(event,'lect')"
+  style="min-height:40px;border-radius:6px;transition:.2s"></div>
     <div class="row" style="margin-top:6px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
@@ -1144,7 +1148,11 @@ function openEditTraining(tid){
    <div class="fld-group"><label class="fld">참석자</label>
     <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
       <span>팀</span><span>점포명</span><span>성명</span><span></span></div>
-    <div id="attList" onpaste="pasteAttData(event)"></div>
+    <div id="attList" onpaste="pasteAttData(event)"
+  ondragover="event.preventDefault();this.style.background='#e8f2ec'"
+  ondragleave="this.style.background=''"
+  ondrop="event.preventDefault();this.style.background='';dropExcelData(event,'att')"
+  style="min-height:40px;border-radius:6px;transition:.2s"></div>
     <div class="row" style="margin-top:8px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addAttRow()">＋ 직접 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
@@ -1317,6 +1325,35 @@ function _modalPasteHandler(e){
     e.preventDefault();
     pasteAttData(e);
   }
+}
+
+function dropExcelData(e, type){
+  const file=e.dataTransfer.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const text=ev.target.result;
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    const start=lines[0]&&/^[0-9:가-힣]/i.test(lines[0])?0:1;
+    if(type==='lect'){
+      const added=[];
+      for(let i=start;i<lines.length;i++){
+        const cols=lines[i].split(/\t|,/).map(c=>c.replace(/^["']|["']$/g,'').trim());
+        if(cols.length>=2&&cols[1])added.push({slot:cols[0]||'',title:cols[1]||'',field:cols[2]||'',instructorName:cols[3]||'',instructorId:''});
+      }
+      LECT_DRAFT=[...LECT_DRAFT,...added];
+      renderLectRows();toast(`강의 ${added.length}개 추가됨`);
+    } else {
+      const added=[];
+      for(let i=start;i<lines.length;i++){
+        const cols=lines[i].split(/\t|,/).map(c=>c.replace(/^["']|["']$/g,'').trim());
+        if(cols.length>=3&&cols[2])added.push({team:cols[0]||'',store:cols[1]||'',name:cols[2]||''});
+      }
+      ATT_DRAFT=[...ATT_DRAFT,...added];
+      renderAttRows();toast(`참석자 ${added.length}명 추가됨`);
+    }
+  };
+  reader.readAsText(file,'UTF-8');
 }
 
 function pasteLectData(e){
@@ -2010,11 +2047,13 @@ function lectOpinions(L){
                 ${session?`<button onclick="removePhoto('${t.id}',${pi})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center">✕</button>`:''}
               </div>`
             : session
-              ? `<label style="cursor:pointer;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:#f0f4f1;border-radius:4px;border:1.5px dashed #cdd8cb;flex-direction:column;gap:4px"
+              ? `<label style="cursor:pointer;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:#f0f4f1;border-radius:4px;border:1.5px dashed #cdd8cb;flex-direction:column;gap:4px;transition:.2s"
                   onclick="this.querySelector('input').click()"
-                  onpaste="handlePhotoPaste(event,'${t.id}',${pi})">
+                  ondragover="event.preventDefault();this.style.background='#d4e8d8';this.style.borderColor='#0e5a34'"
+                  ondragleave="this.style.background='#f0f4f1';this.style.borderColor='#cdd8cb'"
+                  ondrop="event.preventDefault();this.style.background='#f0f4f1';this.style.borderColor='#cdd8cb';dropPhoto(event,'${t.id}',${pi})">
                   <span style="font-size:1.2rem">📷</span>
-                  <span style="font-size:.6rem;color:#aaa">클릭 또는 Ctrl+V</span>
+                  <span style="font-size:.6rem;color:#aaa">클릭·드래그·Ctrl+V</span>
                   <input type="file" accept="image/*" style="display:none" onchange="addPhoto('${t.id}',${pi},this)">
                 </label>`
               : `<div class="rp-photo-ph-sm">📷 ${pi+1}</div>`;
@@ -2139,6 +2178,21 @@ function handlePhotoPaste(e, tid, idx){
 document.addEventListener('paste',function(e){
   // 모달이 열려있고 lectList가 포커스 영역이면 무시 (파일 input이 처리)
 });
+
+function dropPhoto(e, tid, idx){
+  const file=[...e.dataTransfer.files].find(f=>f.type.startsWith('image/'));
+  if(!file){toast('이미지 파일을 드래그해주세요');return;}
+  if(file.size>3*1024*1024){toast('3MB 이하 사진만 가능합니다');return;}
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const t=byId(DB.trainings,tid);
+    if(!t.photos)t.photos=[];
+    t.photos[idx]=ev.target.result;
+    sbPatch('trainings',tid,{photos:t.photos});
+    save();render();toast('📷 사진이 추가되었습니다');
+  };
+  reader.readAsDataURL(file);
+}
 
 function addPhoto(tid, idx, input){
   const file=input.files[0]; if(!file)return;
