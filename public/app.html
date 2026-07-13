@@ -1280,10 +1280,11 @@ function openTrainingModal(){
     <div class="row" style="margin-top:6px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
-        📂 엑셀 업로드
+        📂 파일 업로드
         <input type="file" accept=".csv" style="display:none" onchange="uploadLectExcel(event)">
       </label>
-      <span class="card-sub">CSV: 시간대|강의명|교육팀|강사</span>
+      <button class="btn sm" onclick="pasteFromClipboard('lect')">📋 붙여넣기</button>
+      <span class="card-sub">엑셀 복사 후 📋 클릭</span>
     </div></div>
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">참석자 <span style="font-weight:400;color:var(--ink3)">— 보고서 참석자 목록에 자동 표시됩니다</span></label>
