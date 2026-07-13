@@ -2185,7 +2185,7 @@ function lectOpinions(L){
     <div class="rp-section-box">
       <div class="rp-section-head">교육일정 및 장소</div>
       <div class="rp-section-body">
-        <div style="font-size:.8rem;color:#555;margin-bottom:6px;text-align:center">
+        <div style="font-size:.8rem;color:#555;margin-bottom:6px">
           <div>• ${esc(t.date)} (${dow})</div>
           <div>• ${esc(t.place)}</div>
         </div>
@@ -2241,7 +2241,6 @@ function lectOpinions(L){
   </div>
   <hr class="rp-page-break">
   <!-- ═══ 2페이지 ═══ -->
-  <div class="rp-p2-title">[${esc(t.name)} ${t.round}차수] 집합교육 결과보고</div>
   <div class="rp-two">
     <div>
       <div class="rp-sec">강의별 주요 의견</div>
@@ -2390,18 +2389,21 @@ function removePhoto(tid,idx){
 }
 function printReport(){
   const doc=document.getElementById('reportA4');
-  if(!doc){toast('보고서를 먼저 선택해주세요');return;}
+  if(!doc||!RPQ){toast('교육을 먼저 선택해주세요');return;}
   const t=byId(DB.trainings,RPQ);
   if(!t){toast('교육을 먼저 선택해주세요');return;}
-  toast('📄 PDF 생성 중...');
-  const opt={
-    margin:[8,8,8,8],
-    filename:(t.name+'_'+t.round+'차_결과보고서.pdf'),
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,logging:false},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-  };
-  html2pdf().set(opt).from(doc).save().then(()=>toast('📥 결과보고서 PDF 다운로드 완료'));
+  const w=window.open('','_blank');
+  const styles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
+    .flatMap(s=>[...s.cssRules]).filter(r=>r.cssText&&(r.cssText.includes('.rp-')||r.cssText.includes('report')||r.cssText.includes('@font'))).map(r=>r.cssText).join('\n');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>${t.name} ${t.round}차 결과보고서</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Pretendard',sans-serif;background:#fff;padding:20px}@media print{body{padding:0}button{display:none}}</style>
+  <style>${styles}</style>
+  </head><body>${doc.outerHTML}
+  <script>setTimeout(()=>{window.print()},500)<\/script>
+  </body></html>`);
+  w.document.close();
 }
 
 let BUDGET_DRAFT=[];
@@ -2597,14 +2599,10 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
       </div>
       <div style="font-size:clamp(.75rem,1.4vw,.95rem);font-weight:700;color:#e0a020;margin-top:4px">상호존중과 배려부탁드리며, 원활한 강의 진행을 위해 협조 부탁드립니다.</div>
       <!-- 캐릭터 -->
-      <div class="gs-char-bounce" style="position:absolute;left:1%;bottom:2%;width:clamp(50px,6vw,80px);opacity:0.6">${CHAR_SVG}</div>
-      <div class="gs-char-float" style="position:absolute;right:1%;bottom:2%;width:clamp(50px,6vw,80px);opacity:0.6;transform:scaleX(-1)">${CHAR_SVG}</div>
     </div>`;
   }
   // idx===3: 만족도 QR 슬라이드
   return `<div style="width:100%;height:100%;background:${COLORS.bg2};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;position:relative;overflow:hidden">
-      <div class="gs-char-bounce" style="position:absolute;left:2%;bottom:3%;width:clamp(55px,7vw,90px);opacity:0.65">${CHAR_SVG}</div>
-      <div class="gs-char-wave" style="position:absolute;right:2%;bottom:3%;width:clamp(55px,7vw,90px);opacity:0.65;transform:scaleX(-1)">${CHAR_SVG}</div>
     <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:${COLORS.accent2};letter-spacing:-.02em">교육 만족도 조사</div>
     <div style="background:#fff;border-radius:16px;padding:28px 40px;display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:0 2px 16px rgba(0,0,0,.08)">
       <div style="font-size:clamp(.9rem,2vw,1.25rem);font-weight:800;color:#222;text-align:center;line-height:1.5">
@@ -2799,18 +2797,21 @@ function renderAgendaDoc(t){
 
 function printAgenda(){
   const doc=document.getElementById('agendaDoc');
-  if(!doc){toast('교육진행안을 먼저 선택해주세요');return;}
+  if(!doc||!AQ){toast('교육을 먼저 선택해주세요');return;}
   const t=byId(DB.trainings,AQ);
   if(!t){toast('교육을 먼저 선택해주세요');return;}
-  toast('📄 PDF 생성 중...');
-  const opt={
-    margin:[10,10,10,10],
-    filename:(t.name+'_'+t.round+'차_교육진행안.pdf'),
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,logging:false},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-  };
-  html2pdf().set(opt).from(doc).save().then(()=>toast('📥 교육진행안 PDF 다운로드 완료'));
+  const w=window.open('','_blank');
+  const styles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
+    .flatMap(s=>[...s.cssRules]).filter(r=>r.cssText&&(r.cssText.includes('.ag-')||r.cssText.includes('agenda'))).map(r=>r.cssText).join('\n');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>${t.name} ${t.round}차 교육진행안</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Pretendard',sans-serif;background:#fff;padding:20px}@media print{body{padding:0}button{display:none}}</style>
+  <style>${styles}</style>
+  </head><body>${doc.outerHTML}
+  <script>setTimeout(()=>{window.print()},500)<\/script>
+  </body></html>`);
+  w.document.close();
 }
 
 /* ═══════════ 설정 ═══════════ */
