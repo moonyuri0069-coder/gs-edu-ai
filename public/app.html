@@ -505,8 +505,8 @@ function respAvg(r){return avg(Object.values(r.lect).flatMap(v=>[toScore(v.exper
 function trainingAvg(tid){const rs=respOf(tid);return rs.length?avg(rs.map(respAvg)):0;}
 function trainingRate(t){const n=respOf(t.id).length;return t.invited?Math.min(100,n/t.invited*100):0;}
 function lectureAvg(tid,lid){const vs=respOf(tid).map(r=>r.lect[lid]).filter(Boolean);
-  return {expert:avg(vs.map(v=>v.expert)),practical:avg(vs.map(v=>v.practical)),
-    total:avg(vs.flatMap(v=>[v.expert,v.practical])),n:vs.length};}
+  return {expert:avg(vs.map(v=>toScore(v.expert))),practical:avg(vs.map(v=>toScore(v.practical))),
+    total:avg(vs.flatMap(v=>[toScore(v.expert),toScore(v.practical)])),n:vs.length};}
 function instructorStat(iid,fromD,toD){
   let ex=[],pr=[],n=0;const perT={};
   // 같은 날짜 강의는 1회로 카운트 (중복 제거)
@@ -1122,7 +1122,7 @@ function openEditTraining(tid){
    <div class="fld-group"><label class="fld">강의 구성</label>
     <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
       <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
-    <div id="lectList"></div>
+    <div id="lectList" onpaste="pasteLectData(event)"></div>
     <div class="row" style="margin-top:6px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
@@ -1135,7 +1135,7 @@ function openEditTraining(tid){
    <div class="fld-group"><label class="fld">참석자</label>
     <div style="display:grid;grid-template-columns:90px 1fr 80px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
       <span>팀</span><span>점포명</span><span>성명</span><span></span></div>
-    <div id="attList"></div>
+    <div id="attList" onpaste="pasteAttData(event)"></div>
     <div class="row" style="margin-top:8px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addAttRow()">＋ 직접 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
@@ -1278,6 +1278,32 @@ function renderAttRows(){
    </div>`).join('');
 }
 function addAttRow(){ATT_DRAFT.push({team:'',store:'',name:''});renderAttRows();}
+
+function pasteLectData(e){
+  const text=e.clipboardData?.getData('text');
+  if(!text)return;
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  const added=[];
+  lines.forEach(line=>{
+    const cols=line.split('\t').map(c=>c.trim()); // 엑셀은 탭 구분
+    if(cols.length>=2&&cols[1]){
+      added.push({slot:cols[0]||'',title:cols[1]||'',field:cols[2]||'',instructorName:cols[3]||'',instructorId:''});
+    }
+  });
+  if(added.length){LECT_DRAFT=[...LECT_DRAFT,...added];renderLectRows();toast(`강의 ${added.length}개 붙여넣기 완료`);}
+}
+
+function pasteAttData(e){
+  const text=e.clipboardData?.getData('text');
+  if(!text)return;
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  const added=[];
+  lines.forEach(line=>{
+    const cols=line.split('\t').map(c=>c.trim());
+    if(cols.length>=3&&cols[2]){added.push({team:cols[0]||'',store:cols[1]||'',name:cols[2]||''});}
+  });
+  if(added.length){ATT_DRAFT=[...ATT_DRAFT,...added];renderAttRows();toast(`참석자 ${added.length}명 붙여넣기 완료`);}
+}
 function uploadAttExcel(e){
   const file=e.target.files[0];if(!file)return;
   const ext=file.name.split('.').pop().toLowerCase();
@@ -1859,11 +1885,19 @@ function vReport(){
   const dayNames=['일','월','화','수','목','금','토'];
   const dow=dayNames[new Date(t.date).getDay()]||'';
 
-  function lectOpinions(L){
+  function isValidOpinion(t){
+  if(!t||t.trim().length<=2)return false;
+  // 자음/모음만 있는 경우 제외 (ㅌㅊ, ㅋㅋ 등)
+  if(/^[ㄱ-ㅎㅏ-ㅣ\s!?~\.]+$/.test(t.trim()))return false;
+  // 반복 문자 제외 (ㅎㅎㅎ, ㅋㅋㅋ)
+  if(/^(.){2,}$/.test(t.trim()))return false;
+  return true;
+}
+function lectOpinions(L){
     const goods=[],imps=[];
     rs.forEach(r=>{const v=r.lect[L.id];if(!v)return;
-      if(v.good&&!/^없|^무$|^특이|^\.$|^\s*$/.test(v.good))goods.push(v.good);
-      if(v.improve&&!/^없|^무$|^특이|^\.$|^\s*$/.test(v.improve))imps.push(v.improve);});
+      if(isValidOpinion(v.good))goods.push(v.good.trim());
+      if(isValidOpinion(v.improve))imps.push(v.improve.trim());});
     const uniq=arr=>[...new Set(arr)].slice(0,4);
     return{goods:uniq(goods),imps:uniq(imps)};
   }
@@ -1907,7 +1941,7 @@ function vReport(){
         </div>
         <table class="rp-sched">
           <thead><tr><th>교육시간</th><th>과정명</th><th>교육팀</th><th>강사</th></tr></thead>
-          <tbody>${lstats.map(({L})=>{const ins=byId(DB.instructors,L.instructorId);
+          <tbody>${lstats.filter(({L},i,arr)=>i>0&&i<arr.length-1).map(({L})=>{const ins=byId(DB.instructors,L.instructorId);
             return `<tr><td style="color:#555;font-size:.73rem">${esc(L.slot||'')}</td>
             <td style="font-weight:700">${esc(L.title)}</td>
             <td>${esc(ins?.field||'')}</td><td>${esc(ins?.name||'')}</td></tr>`;}).join('')}
@@ -1936,9 +1970,11 @@ function vReport(){
                 ${session?`<button onclick="removePhoto('${t.id}',${pi})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center">✕</button>`:''}
               </div>`
             : session
-              ? `<label style="cursor:pointer;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:#f0f4f1;border-radius:4px;border:1.5px dashed #cdd8cb;flex-direction:column;gap:4px">
+              ? `<label style="cursor:pointer;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:#f0f4f1;border-radius:4px;border:1.5px dashed #cdd8cb;flex-direction:column;gap:4px"
+                  onclick="this.querySelector('input').click()"
+                  onpaste="handlePhotoPaste(event,'${t.id}',${pi})">
                   <span style="font-size:1.2rem">📷</span>
-                  <span style="font-size:.6rem;color:#aaa">사진 ${pi+1} 추가</span>
+                  <span style="font-size:.6rem;color:#aaa">클릭 또는 Ctrl+V</span>
                   <input type="file" accept="image/*" style="display:none" onchange="addPhoto('${t.id}',${pi},this)">
                 </label>`
               : `<div class="rp-photo-ph-sm">📷 ${pi+1}</div>`;
@@ -1959,7 +1995,7 @@ function vReport(){
       <div class="rp-sec">강의별 주요 의견</div>
       <table class="rp-opinion-table">
         <thead><tr><th style="width:130px">교육명</th><th>의견</th></tr></thead>
-        <tbody>${lstats.map(({L})=>{
+        <tbody>${lstats.filter(({L},i,arr)=>i>0&&i<arr.length-1).map(({L})=>{
           const ins=byId(DB.instructors,L.instructorId);
           const{goods,imps}=lectOpinions(L);
           const all=[...goods.map((g,ix)=>({t:g,hi:ix===0})),...imps.map(g=>({t:g,hi:false}))];
@@ -2007,6 +2043,33 @@ function vReport(){
   <div class="rp-page-end">- 2/2 -</div>
   </div>`;
 }
+function handlePhotoPaste(e, tid, idx){
+  const items=e.clipboardData?.items;
+  if(!items)return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      e.preventDefault();
+      const file=item.getAsFile();
+      if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        const t=byId(DB.trainings,tid);
+        if(!t.photos)t.photos=[];
+        t.photos[idx]=ev.target.result;
+        sbPatch('trainings',tid,{photos:t.photos});
+        save();render();toast('사진이 추가되었습니다');
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+}
+
+// 전역 Ctrl+V로 엑셀 붙여넣기 (강의/참석자)
+document.addEventListener('paste',function(e){
+  // 모달이 열려있고 lectList가 포커스 영역이면 무시 (파일 input이 처리)
+});
+
 function addPhoto(tid, idx, input){
   const file=input.files[0]; if(!file)return;
   if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
@@ -2461,7 +2524,7 @@ async function renderSurvey(tid){
     </div>`;}).join('')}
    <div class="sv-card"><div class="sv-section">과정 전체 설문</div>
     <div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
-    ${t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog()">
+    ${t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog();document.querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">
       <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}
     <div class="sv-q">${esc(t.name)}에서 추가로 필요한(듣고 싶은) 강의 콘텐츠는 무엇인가요?</div>
     <textarea class="input" rows="2" oninput="SV.need=this.value">${esc(SV.need)}</textarea>
