@@ -733,6 +733,68 @@ let session=sessionStorage.getItem('gs_edu_login')==='1';
 if(session&&!DB.trainings.length){
   setTimeout(()=>syncFromSupabase().then(()=>render()),200);
 }
+
+// 전역 Ctrl+V 핸들러
+window.addEventListener('paste', function(e){
+  const items = e.clipboardData?.items || [];
+  
+  // 1. 이미지 붙여넣기 → 결과보고서 사진 슬롯에 추가
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      const modal = document.getElementById('modal');
+      const isModalOpen = modal && modal.innerHTML.trim();
+      if(!isModalOpen && RPQ){ // 보고서 페이지에 있을 때
+        e.preventDefault();
+        const file = item.getAsFile();
+        if(!file) return;
+        if(file.size > 3*1024*1024){ toast('3MB 이하 사진만 가능합니다'); return; }
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const t = byId(DB.trainings, RPQ);
+          if(!t) return;
+          if(!t.photos) t.photos = [];
+          let slot = t.photos.findIndex(p => !p);
+          if(slot === -1) slot = t.photos.length;
+          if(slot >= 6){ toast('사진은 최대 6장까지 가능합니다'); return; }
+          t.photos[slot] = ev.target.result;
+          sbPatch('trainings', RPQ, {photos: t.photos});
+          save(); render(); toast('📷 사진 ' + (slot+1) + ' 추가되었습니다');
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+  }
+
+  // 2. 텍스트(엑셀) 붙여넣기 → 강의/참석자 입력
+  const text = e.clipboardData?.getData('text');
+  if(!text) return;
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if(!lines.length || !lines[0].includes('\t')) return; // 탭 없으면 엑셀 아님
+
+  const modal = document.getElementById('modal');
+  if(!modal || !modal.innerHTML.trim()) return;
+
+  if(document.getElementById('lectList')){
+    e.preventDefault();
+    const start = /^[0-9:]/.test(lines[0]) ? 0 : 1;
+    const added = [];
+    for(let i = start; i < lines.length; i++){
+      const cols = lines[i].split('\t').map(c => c.trim());
+      if(cols.length >= 2 && cols[1]) added.push({slot:cols[0]||'',title:cols[1]||'',field:cols[2]||'',instructorName:cols[3]||'',instructorId:''});
+    }
+    if(added.length){ LECT_DRAFT=[...LECT_DRAFT,...added]; renderLectRows(); toast('강의 '+added.length+'개 붙여넣기 완료'); }
+  } else if(document.getElementById('attList')){
+    e.preventDefault();
+    const start = /^[가-힣]/.test(lines[0].split('\t')[0]) && lines[0].split('\t').length >= 3 ? 0 : 1;
+    const added = [];
+    for(let i = start; i < lines.length; i++){
+      const cols = lines[i].split('\t').map(c => c.trim());
+      if(cols.length >= 3 && cols[2]) added.push({team:cols[0]||'',store:cols[1]||'',name:cols[2]||''});
+    }
+    if(added.length){ ATT_DRAFT=[...ATT_DRAFT,...added]; renderAttRows(); toast('참석자 '+added.length+'명 붙여넣기 완료'); }
+  }
+});
 function nav(hash){location.hash=hash;}
 window.addEventListener('hashchange',render);
 function render(){
