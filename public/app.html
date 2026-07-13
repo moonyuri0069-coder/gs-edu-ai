@@ -1201,10 +1201,11 @@ function openEditTraining(tid){
     <div class="row" style="margin-top:6px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
-        📂 엑셀 업로드
+        📂 파일 업로드
         <input type="file" accept=".csv" style="display:none" onchange="uploadLectExcel(event)">
       </label>
-      <span class="card-sub">CSV: 시간대|강의명|교육팀|강사</span>
+      <button class="btn sm" onclick="pasteFromClipboard('lect')">📋 붙여넣기</button>
+      <span class="card-sub">엑셀 복사 후 📋 클릭</span>
     </div></div>
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">참석자</label>
@@ -1218,10 +1219,11 @@ function openEditTraining(tid){
     <div class="row" style="margin-top:8px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addAttRow()">＋ 직접 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
-        📂 엑셀 업로드
+        📂 파일 업로드
         <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadAttExcel(event)">
       </label>
-      <span class="card-sub">Excel 형식: 팀 | 점포명 | 성명</span>
+      <button class="btn sm" onclick="pasteFromClipboard('att')">📋 붙여넣기</button>
+      <span class="card-sub">엑셀 복사 후 📋 클릭</span>
     </div></div>`,
    `<button class="btn" onclick="closeModal()">취소</button>
     <button class="btn primary" onclick="saveEditTraining('${tid}')">저장</button>`);
@@ -1291,10 +1293,11 @@ function openTrainingModal(){
     <div class="row" style="margin-top:8px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addAttRow()">＋ 직접 추가</button>
       <label class="btn sm" style="cursor:pointer;margin:0">
-        📂 엑셀 업로드
+        📂 파일 업로드
         <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadAttExcel(event)">
       </label>
-      <span class="card-sub">Excel 형식: 팀 | 점포명 | 성명</span>
+      <button class="btn sm" onclick="pasteFromClipboard('att')">📋 붙여넣기</button>
+      <span class="card-sub">엑셀 복사 후 📋 클릭</span>
     </div></div>`,
    `<button class="btn" onclick="closeModal()">취소</button>
     <button class="btn primary" onclick="saveTraining()">교육 생성</button>`);
@@ -1316,6 +1319,39 @@ function renderLectRows(){
    </div>`).join('');
 }
 function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:'',instructorName:'',field:''});renderLectRows();}
+
+async function pasteFromClipboard(type){
+  try{
+    const text = await navigator.clipboard.readText();
+    if(!text){toast('클립보드가 비어있습니다');return;}
+    const lines = text.split(/\r?\n/).filter(l=>l.trim());
+    if(!lines.length){toast('데이터가 없습니다');return;}
+    // 탭 또는 쉼표 구분
+    const sep = lines[0].includes('\t') ? '\t' : ',';
+    if(type==='lect'){
+      const start = /^[0-9:]/.test(lines[0]) ? 0 : 1;
+      const added=[];
+      for(let i=start;i<lines.length;i++){
+        const cols=lines[i].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim());
+        if(cols.length>=2&&cols[1]) added.push({slot:cols[0]||'',title:cols[1]||'',field:cols[2]||'',instructorName:cols[3]||'',instructorId:''});
+      }
+      if(added.length){LECT_DRAFT=[...LECT_DRAFT,...added];renderLectRows();toast('강의 '+added.length+'개 붙여넣기 완료');}
+      else toast('강의 데이터를 찾을 수 없습니다');
+    } else {
+      const start = lines[0].split(sep).length>=3&&/[가-힣]/.test(lines[0]) ? 0 : 1;
+      const added=[];
+      for(let i=start;i<lines.length;i++){
+        const cols=lines[i].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim());
+        if(cols.length>=3&&cols[2]) added.push({team:cols[0]||'',store:cols[1]||'',name:cols[2]||''});
+      }
+      if(added.length){ATT_DRAFT=[...ATT_DRAFT,...added];renderAttRows();toast('참석자 '+added.length+'명 붙여넣기 완료');}
+      else toast('참석자 데이터를 찾을 수 없습니다');
+    }
+  }catch(e){
+    toast('클립보드 읽기 실패 — 브라우저 권한을 허용해주세요');
+    console.warn(e);
+  }
+}
 
 function uploadLectExcel(e){
   const file=e.target.files[0];if(!file)return;
