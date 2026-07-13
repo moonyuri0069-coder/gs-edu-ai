@@ -1313,7 +1313,7 @@ function openQR(id){
    <div class="qrbox"><canvas id="qrC" width="200" height="200"></canvas>
     <div style="min-width:0">
       <div style="font-weight:800">${esc(t.name)} ${t.round}차</div>
-      <div class="card-sub">${t.date} · ${t.type} · 강의 ${t.lectures.length}개</div>
+      <div class="card-sub">${t.date} · ${t.type} · 강의 ${(()=>{const ls=t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1);const s=new Set();return ls.filter(L=>{const k=L.instructorId||L.title;if(s.has(k))return false;s.add(k);return true;}).length;})()}개</div>
       <div class="divider"></div>
       <div style="font-size:.8rem;color:var(--ink3);word-break:break-all">${esc(url)}</div>
       <div class="row" style="margin-top:10px">
@@ -1640,7 +1640,7 @@ function vResults(){
      <td><span class="badge gray">${esc(t.type)}</span></td>
      <td class="num">${t.date}</td>
      <td class="num">${t.round}차</td>
-     <td class="num">${t.lectures.length}개</td>
+     <td class="num">${(()=>{const ls=t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1);const s=new Set();return ls.filter(L=>{const k=L.instructorId||L.title;if(s.has(k))return false;s.add(k);return true;}).length;})()}개</td>
      <td class="num">${n}/${t.invited}</td><td class="num">${pct(trainingRate(t))}</td>
      <td><b class="num">${n?f1(trainingAvg(t.id)):'-'}</b></td></tr>`;}).join('')}
   </tbody></table></div>
@@ -2384,11 +2384,16 @@ async function renderSurvey(tid){
   }
   const LIKERT_COLOR=['#e05252','#e0a832','#16a34a']; // 아쉬움/보통/만족
   const LIKERT_EMOJI=['😕','😐','😊'];
-  const likert=(val,path)=>`<div class="likert">${LIKERT.map((lab,ix)=>{
-    const sel=val===ix+1;
-    return `<button type="button" style="${sel?`background:${LIKERT_COLOR[ix]};border-color:${LIKERT_COLOR[ix]};color:#fff`:''}"
-      class="${sel?'on':''}" onclick="setLik('${path}',${ix+1})">${LIKERT_EMOJI[ix]} ${lab}</button>`;
-  }).join('')}</div>`;
+  const likert=(val,path)=>{
+    const [lid,f]=path.split('.');
+    return `<div class="likert">${LIKERT.map((lab,ix)=>{
+      const sel=val===ix+1;
+      return `<button type="button"
+        data-lect="${lid}" data-field="${f}"
+        style="${sel?`background:${LIKERT_COLOR[ix]};border-color:${LIKERT_COLOR[ix]};color:#fff`:''}"
+        class="${sel?'on':''}" onclick="setLik('${path}',${ix+1})">${LIKERT_EMOJI[ix]} ${lab}</button>`;
+    }).join('')}</div>`;
+  };
   $('#app').innerHTML=`
   <div class="progressbar"><i id="svProg" style="width:0%"></i></div>
   <div class="survey-wrap">
@@ -2401,9 +2406,9 @@ async function renderSurvey(tid){
      <span class="badge gray">${t.type}</span><span class="badge gray">${esc(t.place)}</span></div>
     <div class="card-sub" style="margin-top:10px">강의별 평가 후 마지막에 과정 전체 설문이 이어집니다. (약 3분 · 익명)</div>
    </div>
-   ${t.lectures.map((L,ix)=>{const v=SV.lect[L.id];const label=lectLabel(t,L);
+   ${(SV.lectures||t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1)).map((L,ix,arr)=>{const v=SV.lect[L.id]||{expert:0,practical:0,good:'',improve:''};const label=lectLabel(t,L);
     return `<div class="sv-card">
-     <div class="sv-section">강의평가 ${ix+1} / ${t.lectures.length}</div>
+     <div class="sv-section">강의평가 ${ix+1} / ${arr.length}</div>
      <div style="font-weight:800;font-size:1.02rem">${esc(label)}</div>
      <div class="sv-q">1. 강사의 전문성 및 전달력은 어떠하였나요? <span class="req">*</span></div>${likert(v.expert,L.id+'.expert')}
      <div class="sv-q">2. 교육 내용은 실무에 적용 가능한 내용을 포함하고 있나요? <span class="req">*</span></div>${likert(v.practical,L.id+'.practical')}
@@ -2427,8 +2432,21 @@ async function renderSurvey(tid){
   </div>`;
   prog();
 }
-function setLik(path,n){const [lid,f]=path.split('.');SV.lect[lid][f]=n;renderSurvey(SV.tid);
-  window.scrollTo(0,document.documentElement.scrollTop);}
+function setLik(path,n){
+  const [lid,f]=path.split('.');
+  SV.lect[lid][f]=n;
+  // 전체 재렌더 대신 버튼 상태만 업데이트
+  const buttons=document.querySelectorAll(`[data-lect="${lid}"][data-field="${f}"]`);
+  buttons.forEach((btn,i)=>{
+    const sel=(i+1)===n;
+    const COLORS=['#e05252','#e0a832','#16a34a'];
+    btn.style.background=sel?COLORS[i]:'';
+    btn.style.borderColor=sel?COLORS[i]:'';
+    btn.style.color=sel?'#fff':'';
+  });
+  // 진행률 업데이트
+  prog();
+}
 function prog(){
   const need=[...Object.values(SV.lect).flatMap(v=>[v.expert,v.practical]),SV.recommendLecture?1:0];
   const el=$('#svProg');if(el)el.style.width=Math.round(need.filter(Boolean).length/need.length*100)+'%';
