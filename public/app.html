@@ -894,10 +894,6 @@ function render(){
       document.removeEventListener('paste',_reportPhotoPasteHandler);
       document.addEventListener('paste',_reportPhotoPasteHandler);
     },100);
-    // DB 비어있으면 동기화 후 재렌더
-    if(!DB.trainings.length&&!_syncing){
-      syncFromSupabase().then(()=>render());return;
-    }
   } else {
     document.removeEventListener('paste',_reportPhotoPasteHandler);
   }
