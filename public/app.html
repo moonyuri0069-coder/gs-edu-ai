@@ -2139,7 +2139,22 @@ function vReport(){
   const dayNames=['일','월','화','수','목','금','토'];
   const dow=dayNames[new Date(t.date).getDay()]||'';
 
-  // lectOpinions는 전역 함수 사용
+  // 의견 필터 및 강의별 의견 추출
+  function isValidOpinion(v){
+    if(!v||v.trim().length<=2)return false;
+    if(/^[ㄱ-ㅎㅏ-ㅣ\s!?~\.]+$/.test(v.trim()))return false;
+    if(/^(.){2,}$/.test(v.trim()))return false;
+    return true;
+  }
+  function lectOpinions(L,rsArr){
+    const rs2=rsArr||DB.responses;
+    const goods=[],imps=[];
+    rs2.forEach(r=>{const v=r.lect[L.id];if(!v)return;
+      if(isValidOpinion(v.good))goods.push(v.good.trim());
+      if(isValidOpinion(v.improve))imps.push(v.improve.trim());});
+    const uniq=arr=>[...new Set(arr)].slice(0,4);
+    return{goods:uniq(goods),imps:uniq(imps)};
+  }
   const recCnt={};rs.forEach(r=>{if(r.recommendLecture)recCnt[r.recommendLecture]=(recCnt[r.recommendLecture]||0)+1;});
   const recTop=Object.entries(recCnt).sort((a,b)=>b[1]-a[1]);
   const maxRec=Math.max(...recTop.map(x=>x[1]),1);
@@ -2550,43 +2565,39 @@ function vGuide(){
 }
 
 function renderSlide(idx,t,attendUrl,surveyUrl){
-  const COLORS={bg0:'#e8f2f7',bg1:'#fce8f0',bg2:'#e8f4ed',accent0:'#4a90c4',accent1:'#e85d8a',accent2:'#2d9e5f'};
+  const BG="background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat";
+  // 칠판 영역: left 20%, top 9%, width 60%, height 79%
+  const BOARD="position:absolute;left:20%;top:9%;width:60%;height:79%;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:16px;box-sizing:border-box";
+
+  // ── 슬라이드 0: 출석 등록 QR ──
   if(idx===0){
-    // 출석 QR 슬라이드
-    return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;position:relative;overflow:hidden">
-      <div style="position:absolute;inset:0;background:rgba(0,30,10,.45)"></div>
-      <div style="position:relative;z-index:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px">
-      <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.5)">교육 출석 안내</div>
-      <div style="background:#fff;border-radius:16px;padding:28px 40px;display:flex;gap:40px;align-items:center;box-shadow:0 2px 16px rgba(0,0,0,.08);max-width:80%">
-        <div><canvas id="qrAttend" width="200" height="200"></canvas></div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <div style="font-size:clamp(.9rem,2vw,1.3rem);font-weight:800;color:#222">QR코드를 스캔하여<br>출석 등록을 진행해 주시기 바랍니다.</div>
-          <div style="display:flex;flex-direction:column;gap:6px;color:#444;font-size:clamp(.75rem,1.5vw,1rem)">
-            <div>✔ <b>사번 / 성명</b> 기입 후 제출</div>
-            <div>✔ 제출 완료 시 출석 인정</div>
+    return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
+      <div style="${BOARD}">
+        <div style="font-size:clamp(1rem,2.2vw,1.6rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 1px 6px rgba(0,0,0,.5);margin-bottom:10px">출석 등록 안내</div>
+        <div style="display:flex;gap:20px;align-items:center;justify-content:center">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <canvas id="qrAttend" width="150" height="150" style="background:#fff;border-radius:8px;padding:6px"></canvas>
+            <div style="font-size:.75rem;font-weight:700;color:#ffd700">출석 등록 QR</div>
           </div>
-          <div style="background:${COLORS.bg0};border-radius:8px;padding:6px 12px;font-size:.8rem;color:${COLORS.accent0};font-weight:700">${esc(t.name)} ${t.round}차 · ${t.date}</div>
+          <div style="font-size:clamp(.65rem,1.3vw,.9rem);color:#fff;line-height:1.8;text-shadow:0 1px 3px rgba(0,0,0,.5)">
+            <div>• QR 스캔 후 출석 등록</div>
+            <div>• 사번과 성명 정확히 입력</div>
+            <div style="color:#ffd700;font-weight:700;margin-top:6px">★ 교육 시작 전 등록 필수</div>
+          </div>
         </div>
       </div>
-      <div style="position:absolute;bottom:0;right:0;width:100px;height:100px;background:${COLORS.accent0};opacity:.06;border-radius:50%;transform:translate(30px,30px)"></div>
     </div>`;
   }
+
+  // ── 슬라이드 1: 교육 일정 안내 ──
   if(idx===1){
-    // 교육 일정 슬라이드
     const lectures=t.lectures||[];
-    return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr auto;box-sizing:border-box;font-family:'Pretendard',sans-serif;overflow:hidden;position:relative">
-      <!-- 전체 오버레이 -->
-      <div style="position:absolute;inset:0;background:rgba(0,20,8,.55)"></div>
-      <!-- 상단 헤더 -->
-      <div style="position:relative;z-index:1;padding:clamp(10px,2vh,20px) 32px;display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:1px solid rgba(255,255,255,.2)">
-        <div style="font-size:clamp(1rem,2vw,1.4rem)">📋</div>
-        <div style="font-size:clamp(1.2rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 12px rgba(0,0,0,.9)">교육 일정 안내</div>
-        <div style="font-size:clamp(1rem,2vw,1.4rem)">📋</div>
-      </div>
-      <!-- 테이블 영역 -->
-      <div style="position:relative;z-index:1;overflow:hidden;padding:8px 16px;flex:1">
-        <table style="width:100%;border-collapse:collapse;font-size:clamp(.55rem,1.1vw,.8rem)">
-          <thead><tr style="background:rgba(255,255,255,.15);backdrop-filter:blur(4px)">
+    return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
+      <div style="${BOARD};justify-content:flex-start;padding:12px 16px">
+        <div style="font-size:clamp(.9rem,2vw,1.5rem);font-weight:900;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.5);margin-bottom:8px;text-align:center">📋 교육 일정 안내</div>
+        <div style="width:100%;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:clamp(.55rem,1.1vw,.82rem)">
+          <thead><tr>
             <th style="padding:clamp(4px,.8vh,8px) 8px;font-weight:800;text-align:center;width:22%;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">교육시간</th>
             <th style="padding:clamp(4px,.8vh,8px) 8px;font-weight:800;text-align:center;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">과정명</th>
             <th style="padding:clamp(4px,.8vh,8px) 8px;font-weight:800;text-align:center;width:18%;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">교육팀</th>
@@ -2595,139 +2606,61 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
           <tbody>${lectures.map((L,i)=>{
             const ins=byId(DB.instructors,L.instructorId);
             const isBold=i>0&&i<lectures.length-1;
-            return `<tr style="background:${i%2===0?'rgba(255,255,255,.12)':'rgba(255,255,255,.06)'};border-bottom:1px solid rgba(255,255,255,.15)">
-              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#adf;font-weight:600;font-size:.85em;text-align:center">${esc(L.slot||'-')}</td>
-              <td style="padding:clamp(6px,1.2vh,12px) 12px;font-weight:${isBold?'800':'600'};color:${isBold?'#fff':'rgba(255,255,255,.7)'};text-align:center;font-size:${isBold?'1em':'.85em'}">${esc(L.title)}</td>
-              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:rgba(255,255,255,.85);text-align:center">${esc(L.field||ins?.field||'-')}</td>
-              <td style="padding:8px 14px;text-align:center;font-weight:600">${esc(ins?.name||'-')}</td>
+            return `<tr style="background:${i%2===0?'rgba(255,255,255,.1)':'rgba(255,255,255,.06)'};border-bottom:1px solid rgba(255,255,255,.1)">
+              <td style="padding:clamp(4px,.9vh,10px) 8px;text-align:center;color:rgba(200,230,255,.9);font-size:.9em">${esc(L.slot||'-')}</td>
+              <td style="padding:clamp(4px,.9vh,10px) 8px;font-weight:${isBold?'800':'600'};color:${isBold?'#fff':'rgba(255,255,255,.6)'};text-align:center">${esc(L.title)}</td>
+              <td style="padding:clamp(4px,.9vh,10px) 8px;text-align:center;color:rgba(255,255,255,.85)">${esc(L.field||ins?.field||'-')}</td>
+              <td style="padding:clamp(4px,.9vh,10px) 8px;text-align:center;color:#fff;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.6)">${esc(L.instructorName||ins?.name||'-')}</td>
             </tr>`;
-          }).join('')}
-          </tbody>
+          }).join('')}</tbody>
         </table>
-      </div>
-      <div style="text-align:center;margin-top:10px;font-size:clamp(.6rem,1.2vw,.85rem);color:#999">
-        📍 ${esc(t.place)} · ${t.date}
+        </div>
+        <div style="margin-top:6px;text-align:center;font-size:clamp(.62rem,1.2vw,.82rem);color:#ffd700;font-weight:700">
+          📍 ${esc(t.place||'')} · ${t.date}
+        </div>
       </div>
     </div>`;
   }
-  // idx===2: 교육 에티켓 슬라이드
+
+  // ── 슬라이드 2: 교육 에티켓 ──
   if(idx===2){
-    return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;gap:20px;position:relative">
-      <div style="position:absolute;inset:0;background:rgba(0,30,10,.5)"></div>
-      <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:20px;width:100%"><div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#ffd700;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.8)">교육 에티켓</div>
-      <div style="font-size:clamp(.85rem,1.8vw,1.2rem);font-weight:700;color:#ffd700;margin-top:-8px;text-shadow:0 1px 4px rgba(0,0,0,.8)">함께 만드는 좋은 교육을 위한 기본 약속</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%;max-width:760px">
-        ${[
-          {icon:'📵',label:'집중하기',desc:'휴대폰은 잠시 내려두고\n강의에 집중해 주세요'},
-          {icon:'⏰',label:'시간지키기',desc:'정해진 시간을 지켜\n원활한 진행을 도와주세요'},
-          {icon:'🙋',label:'참여하기',desc:'적극적인 참여로\n더 풍성한 교육을 만들어요'},
-          {icon:'📝',label:'성실한 설문 응답',desc:'솔직한 의견이\n교육 개선에 도움돼요'},
-        ].map(e=>`<div style="background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.3);border-radius:12px;padding:20px 12px;display:flex;flex-direction:column;align-items:center;gap:10px">
-          <div style="font-size:clamp(1.8rem,4vw,2.8rem)">${e.icon}</div>
-          <div style="font-weight:800;font-size:clamp(.8rem,1.6vw,1.05rem);color:#fff;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.8)">${e.label}</div>
-          <div style="font-size:clamp(.65rem,1.2vw,.82rem);color:rgba(255,255,255,.85);text-align:center;line-height:1.5;white-space:pre-line">${e.desc}</div>
-        </div>`).join('')}
+    return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
+      <div style="${BOARD}">
+        <div style="font-size:clamp(.9rem,2vw,1.5rem);font-weight:900;color:#ffd700;letter-spacing:-.02em;text-shadow:0 1px 6px rgba(0,0,0,.5);margin-bottom:6px">교육 에티켓</div>
+        <div style="font-size:clamp(.62rem,1.2vw,.82rem);font-weight:700;color:rgba(255,255,255,.9);margin-bottom:10px">함께 만드는 좋은 교육을 위한 기본 약속</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%">
+          ${[
+            {icon:'📵',label:'집중하기',desc:'휴대폰은 잠시\n내려두고 집중'},
+            {icon:'⏰',label:'시간지키기',desc:'정해진 시간을\n지켜주세요'},
+            {icon:'🙋',label:'참여하기',desc:'적극적 참여로\n풍성한 교육'},
+            {icon:'📝',label:'성실한 설문',desc:'솔직한 의견이\n도움이 돼요'},
+          ].map(e=>`<div style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:5px">
+            <div style="font-size:clamp(1.4rem,2.8vw,2rem)">${e.icon}</div>
+            <div style="font-weight:800;font-size:clamp(.65rem,1.2vw,.85rem);color:#fff;text-align:center">${e.label}</div>
+            <div style="font-size:clamp(.55rem,.95vw,.72rem);color:rgba(255,255,255,.8);text-align:center;line-height:1.4;white-space:pre-line">${e.desc}</div>
+          </div>`).join('')}
+        </div>
+        <div style="margin-top:8px;font-size:clamp(.6rem,1.1vw,.78rem);font-weight:700;color:#ffd700;text-align:center">상호존중과 배려 부탁드립니다.</div>
       </div>
-      <div style="font-size:clamp(.75rem,1.4vw,.95rem);font-weight:700;color:#ffd700;margin-top:4px;text-shadow:0 1px 4px rgba(0,0,0,.8)">상호존중과 배려부탁드리며, 원활한 강의 진행을 위해 협조 부탁드립니다.</div></div>
-      <!-- 캐릭터 -->
     </div>`;
   }
-  // idx===3: 만족도 QR 슬라이드
-  return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;position:relative;overflow:hidden">
-      <div style="position:absolute;inset:0;background:rgba(0,30,10,.45)"></div>
-      <div style="position:relative;z-index:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px">
-    <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.5)">교육 만족도 조사</div>
-    <div style="font-size:clamp(.9rem,2vw,1.25rem);font-weight:800;color:#fff;text-align:center;line-height:1.6;text-shadow:0 2px 6px rgba(0,0,0,.8)">
+
+  // ── 슬라이드 3: 만족도 조사 QR ──
+  return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
+    <div style="${BOARD}">
+      <div style="font-size:clamp(1rem,2.2vw,1.6rem);font-weight:900;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.5);margin-bottom:10px">교육 만족도 조사</div>
+      <div style="font-size:clamp(.65rem,1.2vw,.88rem);font-weight:700;color:#fff;text-align:center;line-height:1.7;margin-bottom:12px;text-shadow:0 1px 3px rgba(0,0,0,.5)">
         여러분의 의견이 교육개발에 큰 도움이 됩니다.<br>
-        <span style="color:#ffd700">☆ 솔직하고 정성껏 작성부탁드립니다.</span>
+        <span style="color:#ffd700">☆ 솔직하고 정성껏 작성 부탁드립니다.</span>
       </div>
-      <div style="background:#fff;border-radius:16px;padding:16px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.3)">
-        <canvas id="qrSurvey" width="200" height="200"></canvas>
+      <div style="background:#fff;border-radius:12px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+        <canvas id="qrSurvey" width="160" height="160"></canvas>
       </div>
-      <div style="font-size:clamp(.8rem,1.6vw,1rem);color:#fff;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.8)">${esc(t.name)} ${t.round}차 만족도 설문</div>
+      <div style="margin-top:10px;font-size:clamp(.62rem,1.2vw,.82rem);color:#ffd700;font-weight:700">${esc(t.name)} ${t.round}차 만족도 설문</div>
+    </div>
   </div>`;
 }
 
-function openSlideFullscreen(){
-  const t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
-  if(!t){toast('교육을 먼저 선택해주세요');return;}
-  const attendUrl=`${location.origin||''}${location.pathname}#/attend/${GUIDE_SEL}`;
-  const surveyUrl=`${location.origin||''}${location.pathname}#/s/${GUIDE_SEL}`;
-  const win=window.open('','_blank','width=1280,height=720');
-  const slideHtml=renderSlide(GUIDE_SLIDE,t,attendUrl,surveyUrl);
-  // 4개 슬라이드 모두 생성
-  const attendUrl2=`${location.origin||''}${location.pathname}#/attend/${GUIDE_SEL}`;
-  const surveyUrl2=`${location.origin||''}${location.pathname}#/s/${GUIDE_SEL}`;
-  const slide0=renderSlide(0,t,attendUrl2,surveyUrl2).replace('id="qrAttend"','id="qrAttend2"');
-  const slide1=renderSlide(1,t,attendUrl2,surveyUrl2);
-  const slide2=renderSlide(2,t,attendUrl2,surveyUrl2);
-  const slide3=renderSlide(3,t,attendUrl2,surveyUrl2).replace('id="qrSurvey"','id="qrSurvey2"');
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
-  <style>*{margin:0;padding:0;box-sizing:border-box}body{width:100vw;height:100vh;overflow:hidden;font-family:'Pretendard',sans-serif;cursor:pointer}
-  .slide-page{width:100%;height:calc(100vh - 36px)}
-  #nav-bar{position:fixed;bottom:0;left:0;width:100%;height:36px;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;gap:16px;color:#fff;font-size:.85rem}
-  #nav-bar button{background:rgba(255,255,255,.2);border:none;color:#fff;padding:4px 14px;border-radius:4px;cursor:pointer;font-size:.82rem}
-  </style></head>
-  <body>
-  <div class="slide-page" style="display:block">${slide0}</div>
-  <div class="slide-page" style="display:none">${slide1}</div>
-  <div class="slide-page" style="display:none">${slide2}</div>
-  <div class="slide-page" style="display:none">${slide3}</div>
-  <div id="nav-bar">
-    <button onclick="event.stopPropagation();goSlide(_slideIdx-1)">◀ 이전</button>
-    <span id="slideNav">1 / 4</span>
-    <button onclick="event.stopPropagation();goSlide(_slideIdx+1)">다음 ▶</button>
-    <span style="margin-left:16px;opacity:.6">클릭·화살표키로 넘기기</span>
-  </div>
-  <script>
-  let _idx=0;
-  const _pages=document.querySelectorAll('.slide-page');
-  const _nav=document.getElementById('slideNav');
-
-  function showSlide(n){
-    _idx=Math.max(0,Math.min(_pages.length-1,n));
-    _pages.forEach((p,i)=>p.style.display=i===_idx?'block':'none');
-    if(_nav)_nav.textContent=(_idx+1)+' / '+_pages.length;
-    drawAllQR();
-  }
-
-  function drawAllQR(){
-    const QR_ATTEND='${attendUrl2}';
-    const QR_SURVEY='${surveyUrl2}';
-    ['qrAttend2','qrSurvey2'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(!el)return;
-      const url=id==='qrAttend2'?QR_ATTEND:QR_SURVEY;
-      const size=200;
-      const apiUrl='https://api.qrserver.com/v1/create-qr-code/?size='+size+'x'+size+'&data='+encodeURIComponent(url)+'&margin=10';
-      // 기존 img 제거
-      const prev=el.parentNode&&el.parentNode.querySelector('img.qr-generated');
-      if(prev)prev.remove();
-      const img=new Image();
-      img.className='qr-generated';
-      img.style.cssText='width:'+size+'px;height:'+size+'px;display:block;border-radius:4px';
-      img.src=apiUrl;
-      if(el.parentNode){el.style.display='none';el.parentNode.insertBefore(img,el);}
-    });
-  }
-
-  document.addEventListener('keydown',function(e){
-    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' ')showSlide(_idx+1);
-    else if(e.key==='ArrowLeft'||e.key==='PageUp')showSlide(_idx-1);
-    else if(e.key==='Escape')window.close();
-  });
-  document.addEventListener('click',function(e){
-    if(e.target.closest('button'))return;
-    showSlide(e.clientX>window.innerWidth/2?_idx+1:_idx-1);
-  });
-
-  // 네비바 버튼용 전역 goSlide
-  function goSlide(n){showSlide(n);}
-
-  setTimeout(drawAllQR,400);
-  <\/script></body></html>`;
-  win.document.write(html);win.document.close();
-}
 
 /* ═══════════ 교육진행안 ═══════════ */
 let AQ=''; // 선택된 교육 ID
