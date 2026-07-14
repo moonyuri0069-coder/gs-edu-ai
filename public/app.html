@@ -2581,28 +2581,30 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
     // 교육 일정 슬라이드
     const lectures=t.lectures||[];
     return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr auto;box-sizing:border-box;font-family:'Pretendard',sans-serif;overflow:hidden;position:relative">
+      <!-- 전체 오버레이 -->
+      <div style="position:absolute;inset:0;background:rgba(0,20,8,.55)"></div>
       <!-- 상단 헤더 -->
-      <div style="background:rgba(0,0,0,.5);backdrop-filter:blur(4px);padding:clamp(12px,2.5vh,24px) 32px;display:flex;align-items:center;justify-content:center;gap:16px">
-        <div style="font-size:clamp(.6rem,1.2vw,.85rem)">📅</div>
-        <div style="font-size:clamp(1.2rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 12px rgba(0,0,0,.8)">교육 일정 안내</div>
-        <div style="font-size:clamp(.6rem,1.2vw,.85rem)">📅</div>
+      <div style="position:relative;z-index:1;padding:clamp(10px,2vh,20px) 32px;display:flex;align-items:center;justify-content:center;gap:12px;border-bottom:1px solid rgba(255,255,255,.2)">
+        <div style="font-size:clamp(1rem,2vw,1.4rem)">📋</div>
+        <div style="font-size:clamp(1.2rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 12px rgba(0,0,0,.9)">교육 일정 안내</div>
+        <div style="font-size:clamp(1rem,2vw,1.4rem)">📋</div>
       </div>
       <!-- 테이블 영역 -->
-      <div style="overflow:hidden;padding:0;flex:1">
-        <table style="width:100%;border-collapse:collapse;font-size:clamp(.7rem,1.6vw,1.1rem)">
-          <thead><tr style="background:#e85d8a;color:#fff;position:sticky;top:0">
-            <th style="padding:clamp(8px,1.5vh,14px) 16px;font-weight:800;text-align:center;width:22%">교육시간</th>
-            <th style="padding:clamp(8px,1.5vh,14px) 16px;font-weight:800;text-align:center">과정명</th>
-            <th style="padding:clamp(8px,1.5vh,14px) 16px;font-weight:800;text-align:center;width:18%">교육팀</th>
-            <th style="padding:clamp(8px,1.5vh,14px) 16px;font-weight:800;text-align:center;width:16%">강사</th>
+      <div style="position:relative;z-index:1;overflow:hidden;padding:8px 16px;flex:1">
+        <table style="width:100%;border-collapse:collapse;font-size:clamp(.7rem,1.6vw,1.05rem)">
+          <thead><tr style="background:rgba(255,255,255,.15);backdrop-filter:blur(4px)">
+            <th style="padding:clamp(6px,1.2vh,12px) 12px;font-weight:800;text-align:center;width:22%;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">교육시간</th>
+            <th style="padding:clamp(6px,1.2vh,12px) 12px;font-weight:800;text-align:center;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">과정명</th>
+            <th style="padding:clamp(6px,1.2vh,12px) 12px;font-weight:800;text-align:center;width:18%;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">교육팀</th>
+            <th style="padding:clamp(6px,1.2vh,12px) 12px;font-weight:800;text-align:center;width:16%;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">강사</th>
           </tr></thead>
           <tbody>${lectures.map((L,i)=>{
             const ins=byId(DB.instructors,L.instructorId);
             const isBold=i>0&&i<lectures.length-1;
-            return `<tr style="background:${i%2===0?'rgba(255,255,255,.88)':'rgba(255,240,245,.85)'};border-bottom:1px solid rgba(255,200,220,.5)">
-              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#888;font-weight:600;font-size:.95em">${esc(L.slot||'-')}</td>
-              <td style="padding:clamp(8px,1.8vh,16px) 16px;font-weight:${isBold?'800':'600'};color:${isBold?'#1a1a2e':'#888'};text-align:center;font-size:${isBold?'1em':'.9em'}">${esc(L.title)}</td>
-              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#666">${esc(L.field||ins?.field||'-')}</td>
+            return `<tr style="background:${i%2===0?'rgba(255,255,255,.12)':'rgba(255,255,255,.06)'};border-bottom:1px solid rgba(255,255,255,.15)">
+              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#adf;font-weight:600;font-size:.95em;text-align:center">${esc(L.slot||'-')}</td>
+              <td style="padding:clamp(6px,1.2vh,12px) 12px;font-weight:${isBold?'800':'600'};color:${isBold?'#fff':'rgba(255,255,255,.7)'};text-align:center;font-size:${isBold?'1em':'.85em'}">${esc(L.title)}</td>
+              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:rgba(255,255,255,.85);text-align:center">${esc(L.field||ins?.field||'-')}</td>
               <td style="padding:8px 14px;text-align:center;font-weight:600">${esc(ins?.name||'-')}</td>
             </tr>`;
           }).join('')}
@@ -2619,7 +2621,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
     return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;gap:20px;position:relative">
       <div style="position:absolute;inset:0;background:rgba(0,30,10,.5)"></div>
       <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:20px;width:100%"><div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#ffd700;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.8)">교육 에티켓</div>
-      <div style="font-size:clamp(.85rem,1.8vw,1.2rem);font-weight:700;color:#555;margin-top:-8px">함께 만드는 좋은 교육을 위한 기본 약속</div>
+      <div style="font-size:clamp(.85rem,1.8vw,1.2rem);font-weight:700;color:#ffd700;margin-top:-8px;text-shadow:0 1px 4px rgba(0,0,0,.8)">함께 만드는 좋은 교육을 위한 기본 약속</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%;max-width:760px">
         ${[
           {icon:'📵',label:'집중하기',desc:'휴대폰은 잠시 내려두고\n강의에 집중해 주세요'},
@@ -2641,14 +2643,14 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
       <div style="position:absolute;inset:0;background:rgba(0,30,10,.45)"></div>
       <div style="position:relative;z-index:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px">
     <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.5)">교육 만족도 조사</div>
-    <div style="background:#fff;border-radius:16px;padding:28px 40px;display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:0 2px 16px rgba(0,0,0,.08)">
-      <div style="font-size:clamp(.9rem,2vw,1.25rem);font-weight:800;color:#222;text-align:center;line-height:1.5">
+    <div style="font-size:clamp(.9rem,2vw,1.25rem);font-weight:800;color:#fff;text-align:center;line-height:1.6;text-shadow:0 2px 6px rgba(0,0,0,.8)">
         여러분의 의견이 교육개발에 큰 도움이 됩니다.<br>
-        <span style="color:${COLORS.accent2}">☆ 솔직하고 정성껏 작성부탁드립니다.</span>
+        <span style="color:#ffd700">☆ 솔직하고 정성껏 작성부탁드립니다.</span>
       </div>
-      <canvas id="qrSurvey" width="200" height="200" style="border:1px solid #eee;border-radius:8px;padding:6px;background:#fff"></canvas>
-      <div style="background:${COLORS.bg2};border-radius:8px;padding:6px 14px;font-size:.82rem;color:${COLORS.accent2};font-weight:700">${esc(t.name)} ${t.round}차 만족도 설문</div>
-    </div>
+      <div style="background:#fff;border-radius:16px;padding:16px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.3)">
+        <canvas id="qrSurvey" width="200" height="200"></canvas>
+      </div>
+      <div style="font-size:clamp(.8rem,1.6vw,1rem);color:#fff;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.8)">${esc(t.name)} ${t.round}차 만족도 설문</div>
   </div>`;
 }
 
@@ -2714,8 +2716,13 @@ function openSlideFullscreen(){
   }
   setTimeout(drawQRFullscreen,500);
   // 슬라이드 변경 시 QR 재그리기
-  const _origGoSlide=goSlide;
-  function goSlide(idx){_origGoSlide(idx);setTimeout(drawQRFullscreen,200);}
+  // goSlide 재정의 (중복 방지)
+  const _baseGoSlide=function(idx){
+    _slideIdx=Math.max(0,Math.min(_slides.length-1,idx));
+    renderCurrentSlide();
+    setTimeout(drawQRFullscreen,200);
+  };
+  function goSlide(idx){_baseGoSlide(idx);}
   function goSlide(idx){
     _slideIdx=Math.max(0,Math.min(_slides.length-1,idx));
     renderCurrentSlide();
