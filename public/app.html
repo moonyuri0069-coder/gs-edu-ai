@@ -894,6 +894,10 @@ function render(){
       document.removeEventListener('paste',_reportPhotoPasteHandler);
       document.addEventListener('paste',_reportPhotoPasteHandler);
     },100);
+    // DB 비어있으면 동기화 후 재렌더
+    if(!DB.trainings.length&&!_syncing){
+      syncFromSupabase().then(()=>render());return;
+    }
   } else {
     document.removeEventListener('paste',_reportPhotoPasteHandler);
   }
@@ -2519,12 +2523,13 @@ function vGuide(){
           <button class="btn sm" onclick="nav('#/attend/${GUIDE_SEL}')">출석 URL 열기</button>
         `:''}
         ${GUIDE_SLIDE===3?`
+          <div style="font-size:.8rem;color:var(--ink3)">응답 <b style="color:var(--green)">${respOf(GUIDE_SEL).length}건</b></div>
           <button class="btn sm" onclick="nav('#/s/${GUIDE_SEL}')">설문 미리보기</button>
         `:''}
-        ${GUIDE_SLIDE===1||GUIDE_SLIDE===2?`<span class="card-sub">교육 진행 중</span>`:''}
+
       </div>
     </div>
-    ${GUIDE_SLIDE===0&&(t.checkins||[]).length?`
+    ${GUIDE_SLIDE===0&&t&&(t.checkins||[]).length>0?`
     <div style="margin-top:10px">
       <div class="spread" style="margin-bottom:6px">
         <span style="font-size:.82rem;font-weight:700;color:var(--ink2)">출석 등록 현황</span>
@@ -2580,7 +2585,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
       </div>
       <!-- 테이블 영역 -->
       <div style="position:relative;z-index:1;overflow:hidden;padding:8px 16px;flex:1">
-        <table style="width:100%;border-collapse:collapse;font-size:clamp(.62rem,1.3vw,.92rem)">
+        <table style="width:100%;border-collapse:collapse;font-size:clamp(.55rem,1.1vw,.8rem)">
           <thead><tr style="background:rgba(255,255,255,.15);backdrop-filter:blur(4px)">
             <th style="padding:clamp(4px,.8vh,8px) 8px;font-weight:800;text-align:center;width:22%;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">교육시간</th>
             <th style="padding:clamp(4px,.8vh,8px) 8px;font-weight:800;text-align:center;color:#ffd700;border-bottom:2px solid rgba(255,215,0,.5)">과정명</th>
@@ -2591,7 +2596,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
             const ins=byId(DB.instructors,L.instructorId);
             const isBold=i>0&&i<lectures.length-1;
             return `<tr style="background:${i%2===0?'rgba(255,255,255,.12)':'rgba(255,255,255,.06)'};border-bottom:1px solid rgba(255,255,255,.15)">
-              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#adf;font-weight:600;font-size:.95em;text-align:center">${esc(L.slot||'-')}</td>
+              <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#adf;font-weight:600;font-size:.85em;text-align:center">${esc(L.slot||'-')}</td>
               <td style="padding:clamp(6px,1.2vh,12px) 12px;font-weight:${isBold?'800':'600'};color:${isBold?'#fff':'rgba(255,255,255,.7)'};text-align:center;font-size:${isBold?'1em':'.85em'}">${esc(L.title)}</td>
               <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:rgba(255,255,255,.85);text-align:center">${esc(L.field||ins?.field||'-')}</td>
               <td style="padding:8px 14px;text-align:center;font-weight:600">${esc(ins?.name||'-')}</td>
@@ -3118,7 +3123,7 @@ async function submitAttend(tid){
    <div style="font-size:1.1rem;font-weight:800;margin-top:6px;color:var(--green)">${esc(name)}</div>
    <div class="card-sub" style="margin-top:4px">사번 ${esc(empNo)}</div>
    <div class="card-sub" style="margin-top:12px">${esc(t.name)} ${t.round}차 · ${t.date}</div>
-   ${session?`<button class="btn primary" style="margin-top:18px" onclick="nav('#/guide')">관리자 화면으로</button>`:''}
+   ${session?`<button class="btn primary" style="margin-top:18px" onclick="GUIDE_SLIDE=0;nav('#/guide')">관리자 화면으로</button>`:''}
   </div></div>`;
 }
 function renderDone(){
