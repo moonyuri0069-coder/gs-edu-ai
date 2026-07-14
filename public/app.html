@@ -2135,22 +2135,7 @@ function vReport(){
   const dayNames=['일','월','화','수','목','금','토'];
   const dow=dayNames[new Date(t.date).getDay()]||'';
 
-  function isValidOpinion(t){
-  if(!t||t.trim().length<=2)return false;
-  // 자음/모음만 있는 경우 제외 (ㅌㅊ, ㅋㅋ 등)
-  if(/^[ㄱ-ㅎㅏ-ㅣ\s!?~\.]+$/.test(t.trim()))return false;
-  // 반복 문자 제외 (ㅎㅎㅎ, ㅋㅋㅋ)
-  if(/^(.){2,}$/.test(t.trim()))return false;
-  return true;
-}
-function lectOpinions(L){
-    const goods=[],imps=[];
-    rs.forEach(r=>{const v=r.lect[L.id];if(!v)return;
-      if(isValidOpinion(v.good))goods.push(v.good.trim());
-      if(isValidOpinion(v.improve))imps.push(v.improve.trim());});
-    const uniq=arr=>[...new Set(arr)].slice(0,4);
-    return{goods:uniq(goods),imps:uniq(imps)};
-  }
+  // lectOpinions는 전역 함수 사용
   const recCnt={};rs.forEach(r=>{if(r.recommendLecture)recCnt[r.recommendLecture]=(recCnt[r.recommendLecture]||0)+1;});
   const recTop=Object.entries(recCnt).sort((a,b)=>b[1]-a[1]);
   const maxRec=Math.max(...recTop.map(x=>x[1]),1);
@@ -2250,7 +2235,7 @@ function lectOpinions(L){
         <thead><tr><th style="width:130px">교육명</th><th>의견</th></tr></thead>
         <tbody>${lstats.map(({L})=>{
           const ins=byId(DB.instructors,L.instructorId);
-          const{goods,imps}=lectOpinions(L);
+          const{goods,imps}=lectOpinions(L,rs);
           const all=[...goods.map((g,ix)=>({t:g,hi:ix===0})),...imps.map(g=>({t:g,hi:false}))];
           return `<tr>
             <td class="lname">${esc(L.title)}<br>
@@ -2479,7 +2464,7 @@ function saveBudget(tid){
 }
 
 /* ═══════════ 교육생안내 ═══════════ */
-let GUIDE_SEL='';let GUIDE_SLIDE=0; // 0=출석QR 1=일정안내 2=만족도QR
+let GUIDE_SEL='';let GUIDE_SLIDE=0; // 0=출석QR 1=일정안내 2=에티켓 3=만족도QR
 function vGuide(){
   const trainings=DB.trainings.filter(t=>t.status==='open').concat(
     DB.trainings.filter(t=>t.status!=='open').sort((a,b)=>a.date<b.date?1:-1)
