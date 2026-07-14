@@ -2110,6 +2110,21 @@ function vAI(){
 
 /* ═══════════ 보고서 ═══════════ */
 let RPQ='';
+function isValidOpinion(v){
+  if(!v||v.trim().length<=2)return false;
+  if(/^[ㄱ-ㅎㅏ-ㅣ\s!?~\.]+$/.test(v.trim()))return false;
+  if(/^(.){2,}$/.test(v.trim()))return false;
+  return true;
+}
+function lectOpinions(L,rsArr){
+  const rs2=rsArr||DB.responses;
+  const goods=[],imps=[];
+  rs2.forEach(r=>{const v=r.lect[L.id];if(!v)return;
+    if(isValidOpinion(v.good))goods.push(v.good.trim());
+    if(isValidOpinion(v.improve))imps.push(v.improve.trim());});
+  const uniq=arr=>[...new Set(arr)].slice(0,4);
+  return{goods:uniq(goods),imps:uniq(imps)};
+}
 function vReport(){
   if(!RPQ)RPQ=AIQ||DB.trainings.slice(-1)[0]?.id||'';
   const t=byId(DB.trainings,RPQ);
@@ -2139,22 +2154,7 @@ function vReport(){
   const dayNames=['일','월','화','수','목','금','토'];
   const dow=dayNames[new Date(t.date).getDay()]||'';
 
-  // 의견 필터 및 강의별 의견 추출
-  function isValidOpinion(v){
-    if(!v||v.trim().length<=2)return false;
-    if(/^[ㄱ-ㅎㅏ-ㅣ\s!?~\.]+$/.test(v.trim()))return false;
-    if(/^(.){2,}$/.test(v.trim()))return false;
-    return true;
-  }
-  function lectOpinions(L,rsArr){
-    const rs2=rsArr||DB.responses;
-    const goods=[],imps=[];
-    rs2.forEach(r=>{const v=r.lect[L.id];if(!v)return;
-      if(isValidOpinion(v.good))goods.push(v.good.trim());
-      if(isValidOpinion(v.improve))imps.push(v.improve.trim());});
-    const uniq=arr=>[...new Set(arr)].slice(0,4);
-    return{goods:uniq(goods),imps:uniq(imps)};
-  }
+
   const recCnt={};rs.forEach(r=>{if(r.recommendLecture)recCnt[r.recommendLecture]=(recCnt[r.recommendLecture]||0)+1;});
   const recTop=Object.entries(recCnt).sort((a,b)=>b[1]-a[1]);
   const maxRec=Math.max(...recTop.map(x=>x[1]),1);
@@ -2564,6 +2564,76 @@ function vGuide(){
   </div>`:''}`;
 }
 
+function openSlideFullscreen(){
+  const t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
+  if(!t){toast('교육을 먼저 선택해주세요');return;}
+  const base=`${location.origin||''}${location.pathname}`;
+  const attendUrl=base+'#/attend/'+GUIDE_SEL;
+  const surveyUrl=base+'#/s/'+GUIDE_SEL;
+  const s0=renderSlide(0,t,attendUrl,surveyUrl).replace('id="qrAttend"','id="qrA2"');
+  const s1=renderSlide(1,t,attendUrl,surveyUrl);
+  const s2=renderSlide(2,t,attendUrl,surveyUrl);
+  const s3=renderSlide(3,t,attendUrl,surveyUrl).replace('id="qrSurvey"','id="qrS2"');
+  const aUrl=JSON.stringify(attendUrl);
+  const sUrl=JSON.stringify(surveyUrl);
+  const w=window.open('','_blank','width=1280,height=720');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{width:100vw;height:100vh;overflow:hidden;background:#000;font-family:'Pretendard',sans-serif}
+    .sp{width:100%;height:calc(100vh - 40px);display:none}
+    .sp.on{display:block}
+    #nb{position:fixed;bottom:0;left:0;width:100%;height:40px;background:rgba(0,0,0,.7);
+      display:flex;align-items:center;justify-content:center;gap:16px;color:#fff;font-size:.85rem;z-index:99}
+    #nb button{background:rgba(255,255,255,.2);border:none;color:#fff;padding:4px 16px;border-radius:4px;cursor:pointer}
+  </style></head><body>
+  <div class="sp on" id="p0">${s0}</div>
+  <div class="sp" id="p1">${s1}</div>
+  <div class="sp" id="p2">${s2}</div>
+  <div class="sp" id="p3">${s3}</div>
+  <div id="nb">
+    <button onclick="go(-1)">◀ 이전</button>
+    <span id="nn">1 / 4</span>
+    <button onclick="go(1)">다음 ▶</button>
+    <span style="opacity:.5;margin-left:12px">화살표키 · 클릭으로 넘기기</span>
+  </div>
+  <script>
+  var idx=0,pages=document.querySelectorAll('.sp');
+  function go(d){
+    pages[idx].classList.remove('on');
+    idx=Math.max(0,Math.min(3,idx+d));
+    pages[idx].classList.add('on');
+    document.getElementById('nn').textContent=(idx+1)+' / 4';
+    qr();
+  }
+  function qr(){
+    ['qrA2','qrS2'].forEach(function(id){
+      var el=document.getElementById(id);if(!el)return;
+      var url=id==='qrA2'?${aUrl}:${sUrl};
+      var sz=250;
+      var api='https://api.qrserver.com/v1/create-qr-code/?size='+sz+'x'+sz+'&data='+encodeURIComponent(url)+'&margin=10';
+      var prev=el.parentNode&&el.parentNode.querySelector('img.qg');
+      if(prev)prev.remove();
+      var img=new Image();img.className='qg';
+      img.style.cssText='width:'+sz+'px;height:'+sz+'px;display:block;border-radius:6px';
+      img.src=api;
+      if(el.parentNode){el.style.display='none';el.parentNode.insertBefore(img,el);}
+    });
+  }
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' ')go(1);
+    else if(e.key==='ArrowLeft')go(-1);
+    else if(e.key==='Escape')window.close();
+  });
+  document.addEventListener('click',function(e){
+    if(e.target.closest('button'))return;
+    go(e.clientX>window.innerWidth/2?1:-1);
+  });
+  setTimeout(qr,400);
+  <\/script></body></html>`);
+  w.document.close();
+}
+
 function renderSlide(idx,t,attendUrl,surveyUrl){
   const BG="background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat";
   // 칠판 영역: left 20%, top 9%, width 60%, height 79%
@@ -2573,16 +2643,16 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
   if(idx===0){
     return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
       <div style="${BOARD}">
-        <div style="font-size:clamp(1rem,2.2vw,1.6rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 1px 6px rgba(0,0,0,.5);margin-bottom:10px">출석 등록 안내</div>
-        <div style="display:flex;gap:20px;align-items:center;justify-content:center">
-          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
-            <canvas id="qrAttend" width="150" height="150" style="background:#fff;border-radius:8px;padding:6px"></canvas>
-            <div style="font-size:.75rem;font-weight:700;color:#ffd700">출석 등록 QR</div>
+        <div style="font-size:clamp(1.8rem,3.5vw,4rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.6);margin-bottom:20px">출석 등록 안내</div>
+        <div style="display:flex;gap:50px;align-items:center;justify-content:center">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+            <canvas id="qrAttend" width="250" height="250" style="background:#fff;border-radius:10px;padding:8px"></canvas>
+            <div style="font-size:clamp(.9rem,1.8vw,1.4rem);font-weight:700;color:#ffd700;text-shadow:0 1px 4px rgba(0,0,0,.6)">출석 등록 QR</div>
           </div>
-          <div style="font-size:clamp(.65rem,1.3vw,.9rem);color:#fff;line-height:1.8;text-shadow:0 1px 3px rgba(0,0,0,.5)">
+          <div style="font-size:clamp(1rem,2vw,2rem);color:#fff;line-height:1.8;text-shadow:0 1px 4px rgba(0,0,0,.5)">
             <div>• QR 스캔 후 출석 등록</div>
             <div>• 사번과 성명 정확히 입력</div>
-            <div style="color:#ffd700;font-weight:700;margin-top:6px">★ 교육 시작 전 등록 필수</div>
+            <div style="color:#ffd700;font-weight:800;margin-top:14px;font-size:clamp(1rem,2vw,2.2rem)">★ 교육 시작 전 등록 필수</div>
           </div>
         </div>
       </div>
