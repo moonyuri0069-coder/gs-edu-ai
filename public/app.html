@@ -2686,15 +2686,15 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
             const ins=byId(DB.instructors,L.instructorId);
             const isBold=i>0&&i<lectures.length-1;
             return `<tr style="background:${i%2===0?'rgba(255,255,255,.1)':'rgba(255,255,255,.06)'};border-bottom:1px solid rgba(255,255,255,.1)">
-              <td style="padding:clamp(12px,2vh,20px) 12px;text-align:center;color:rgba(200,230,255,.9)">${esc(L.slot||'-')}</td>
-              <td style="padding:clamp(12px,2vh,20px) 12px;font-weight:${isBold?'800':'600'};color:${isBold?'#fff':'rgba(255,255,255,.6)'};text-align:center">${esc(L.title)}</td>
-              <td style="padding:clamp(12px,2vh,20px) 12px;text-align:center;color:rgba(255,255,255,.85)">${esc(L.field||ins?.field||'-')}</td>
-              <td style="padding:clamp(12px,2vh,20px) 12px;text-align:center;color:#fff;font-weight:700;text-shadow:0 1px 3px rgba(0,0,0,.6)">${esc(L.instructorName||ins?.name||'-')}</td>
+              <td style="padding:clamp(12px,2vh,20px) 12px;text-align:center;color:#fff;font-weight:700;font-size:clamp(1rem,1.6vw,1.6rem)">${esc(L.slot||'-')}</td>
+              <td style="padding:clamp(12px,2vh,20px) 12px;font-weight:700;color:#fff;text-align:center;font-size:clamp(1rem,1.6vw,1.6rem)">${esc(L.title)}</td>
+              <td style="padding:clamp(12px,2vh,20px) 12px;text-align:center;color:#fff;font-weight:700;font-size:clamp(1rem,1.6vw,1.6rem)">${esc(L.field||ins?.field||'-')}</td>
+              <td style="padding:clamp(12px,2vh,20px) 12px;text-align:center;color:#fff;font-weight:700;font-size:clamp(1rem,1.6vw,1.6rem);text-shadow:0 1px 3px rgba(0,0,0,.6)">${esc(L.instructorName||ins?.name||'-')}</td>
             </tr>`;
           }).join('')}</tbody>
         </table>
         </div></div>
-        <div style="text-align:center;font-size:clamp(1rem,1.8vw,1.75rem);color:#ffd700;font-weight:700;width:100%">
+        <div style="text-align:center;font-size:clamp(.6rem,.9vw,.875rem);color:#ffd700;font-weight:700;width:100%">
           📍 ${esc(t.place||'')} &nbsp;·&nbsp; ${t.date}
         </div>
       </div>
@@ -2713,7 +2713,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
             {icon:'⏰',label:'시간지키기',desc:'정해진 시간을\n지켜주세요'},
             {icon:'🙋',label:'참여하기',desc:'적극적 참여로\n풍성한 교육'},
             {icon:'📝',label:'성실한 설문',desc:'솔직한 의견이\n도움이 돼요'},
-          ].map(e=>`<div style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:14px;padding:6% 4%;display:flex;flex-direction:column;align-items:center;gap:6%;height:100%;box-sizing:border-box;justify-content:center">
+          ].map(e=>`<div style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:14px;padding:2% 4%;display:flex;flex-direction:column;align-items:center;gap:4%;height:80%;box-sizing:border-box;justify-content:center">
             <div style="font-size:clamp(2rem,4vw,5rem)">${e.icon}</div>
             <div style="font-weight:800;font-size:clamp(1rem,2vw,2.25rem);color:#fff;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.7)">${e.label}</div>
             <div style="font-size:clamp(.8rem,1.5vw,1.75rem);color:rgba(255,255,255,.85);text-align:center;line-height:1.5;white-space:pre-line">${e.desc}</div>
