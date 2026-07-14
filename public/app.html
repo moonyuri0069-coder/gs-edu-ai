@@ -2497,10 +2497,9 @@ function vGuide(){
 
   return `
   <!-- 배경 이미지 + 중앙 콘텐츠 -->
-  <div style="position:fixed;inset:0;z-index:0;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;filter:brightness(.85)"></div>
-  <div style="position:relative;z-index:1;min-height:calc(100vh - 60px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px">
+
   <!-- 교육 선택 -->
-  <div class="card card-pad" style="margin-bottom:14px;max-width:860px;width:100%;background:rgba(255,255,255,.92);backdrop-filter:blur(8px)">
+  <div class="card card-pad" style="margin-bottom:14px">
     <div class="spread" style="flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-weight:800;margin-bottom:6px">교육 선택</div>
@@ -2518,12 +2517,12 @@ function vGuide(){
   </div>
 
   <!-- 슬라이드 미리보기 16:9 -->
-  <div id="slidePreview" style="width:100%;max-width:860px;aspect-ratio:16/9;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)">
+  <div id="slidePreview" style="width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)">
     ${t?renderSlide(GUIDE_SLIDE,t,attendUrl,surveyUrl):'<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f3f5f2;color:#aaa">교육을 선택해주세요</div>'}
   </div>
 
   <!-- 슬라이드 설명 -->
-  ${t?`<div class="card card-pad" style="margin-top:14px;max-width:860px;width:100%;background:rgba(255,255,255,.92);backdrop-filter:blur(8px)">
+  ${t?`<div class="card card-pad" style="margin-top:14px">
     <div class="spread">
       <div>
         <b>${slides[GUIDE_SLIDE]}</b>
@@ -2560,8 +2559,10 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
   const COLORS={bg0:'#e8f2f7',bg1:'#fce8f0',bg2:'#e8f4ed',accent0:'#4a90c4',accent1:'#e85d8a',accent2:'#2d9e5f'};
   if(idx===0){
     // 출석 QR 슬라이드
-    return `<div style="width:100%;height:100%;background:${COLORS.bg0};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;position:relative;overflow:hidden">
-      <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:${COLORS.accent0};letter-spacing:-.02em">교육 출석 안내</div>
+    return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0;background:rgba(0,30,10,.45)"></div>
+      <div style="position:relative;z-index:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px">
+      <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.5)">교육 출석 안내</div>
       <div style="background:#fff;border-radius:16px;padding:28px 40px;display:flex;gap:40px;align-items:center;box-shadow:0 2px 16px rgba(0,0,0,.08);max-width:80%">
         <div><canvas id="qrAttend" width="200" height="200"></canvas></div>
         <div style="display:flex;flex-direction:column;gap:12px">
@@ -2579,11 +2580,11 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
   if(idx===1){
     // 교육 일정 슬라이드
     const lectures=t.lectures||[];
-    return `<div style="width:100%;height:100%;background:${COLORS.bg1};display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr auto;box-sizing:border-box;font-family:'Pretendard',sans-serif;overflow:hidden;position:relative">
+    return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:grid;grid-template-columns:1fr;grid-template-rows:auto 1fr auto;box-sizing:border-box;font-family:'Pretendard',sans-serif;overflow:hidden;position:relative">
       <!-- 상단 헤더 -->
-      <div style="background:linear-gradient(135deg,#e85d8a 0%,#f48ab0 100%);padding:clamp(12px,2.5vh,24px) 32px;display:flex;align-items:center;justify-content:center;gap:16px">
+      <div style="background:rgba(0,0,0,.5);backdrop-filter:blur(4px);padding:clamp(12px,2.5vh,24px) 32px;display:flex;align-items:center;justify-content:center;gap:16px">
         <div style="font-size:clamp(.6rem,1.2vw,.85rem)">📅</div>
-        <div style="font-size:clamp(1.2rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.15)">교육 일정 안내</div>
+        <div style="font-size:clamp(1.2rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 12px rgba(0,0,0,.8)">교육 일정 안내</div>
         <div style="font-size:clamp(.6rem,1.2vw,.85rem)">📅</div>
       </div>
       <!-- 테이블 영역 -->
@@ -2598,7 +2599,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
           <tbody>${lectures.map((L,i)=>{
             const ins=byId(DB.instructors,L.instructorId);
             const isBold=i>0&&i<lectures.length-1;
-            return `<tr style="background:${i%2===0?'#fff':'#fff5f8'};border-bottom:1px solid #fce4ee">
+            return `<tr style="background:${i%2===0?'rgba(255,255,255,.88)':'rgba(255,240,245,.85)'};border-bottom:1px solid rgba(255,200,220,.5)">
               <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#888;font-weight:600;font-size:.95em">${esc(L.slot||'-')}</td>
               <td style="padding:clamp(8px,1.8vh,16px) 16px;font-weight:${isBold?'800':'600'};color:${isBold?'#1a1a2e':'#888'};text-align:center;font-size:${isBold?'1em':'.9em'}">${esc(L.title)}</td>
               <td style="padding:clamp(8px,1.8vh,16px) 16px;text-align:center;color:#666">${esc(L.field||ins?.field||'-')}</td>
@@ -2615,8 +2616,9 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
   }
   // idx===2: 교육 에티켓 슬라이드
   if(idx===2){
-    return `<div style="width:100%;height:100%;background:#fffbea;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;gap:20px">
-      <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#e0a020;letter-spacing:-.02em">교육 에티켓</div>
+    return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;gap:20px;position:relative">
+      <div style="position:absolute;inset:0;background:rgba(0,30,10,.5)"></div>
+      <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:20px;width:100%"><div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#ffd700;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.8)">교육 에티켓</div>
       <div style="font-size:clamp(.85rem,1.8vw,1.2rem);font-weight:700;color:#555;margin-top:-8px">함께 만드는 좋은 교육을 위한 기본 약속</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%;max-width:760px">
         ${[
@@ -2624,19 +2626,21 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
           {icon:'⏰',label:'시간지키기',desc:'정해진 시간을 지켜\n원활한 진행을 도와주세요'},
           {icon:'🙋',label:'참여하기',desc:'적극적인 참여로\n더 풍성한 교육을 만들어요'},
           {icon:'📝',label:'성실한 설문 응답',desc:'솔직한 의견이\n교육 개선에 도움돼요'},
-        ].map(e=>`<div style="background:#fff;border-radius:12px;padding:20px 12px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+        ].map(e=>`<div style="background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.3);border-radius:12px;padding:20px 12px;display:flex;flex-direction:column;align-items:center;gap:10px">
           <div style="font-size:clamp(1.8rem,4vw,2.8rem)">${e.icon}</div>
-          <div style="font-weight:800;font-size:clamp(.8rem,1.6vw,1.05rem);color:#333;text-align:center">${e.label}</div>
-          <div style="font-size:clamp(.65rem,1.2vw,.82rem);color:#888;text-align:center;line-height:1.5;white-space:pre-line">${e.desc}</div>
+          <div style="font-weight:800;font-size:clamp(.8rem,1.6vw,1.05rem);color:#fff;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.8)">${e.label}</div>
+          <div style="font-size:clamp(.65rem,1.2vw,.82rem);color:rgba(255,255,255,.85);text-align:center;line-height:1.5;white-space:pre-line">${e.desc}</div>
         </div>`).join('')}
       </div>
-      <div style="font-size:clamp(.75rem,1.4vw,.95rem);font-weight:700;color:#e0a020;margin-top:4px">상호존중과 배려부탁드리며, 원활한 강의 진행을 위해 협조 부탁드립니다.</div>
+      <div style="font-size:clamp(.75rem,1.4vw,.95rem);font-weight:700;color:#ffd700;margin-top:4px;text-shadow:0 1px 4px rgba(0,0,0,.8)">상호존중과 배려부탁드리며, 원활한 강의 진행을 위해 협조 부탁드립니다.</div></div>
       <!-- 캐릭터 -->
     </div>`;
   }
   // idx===3: 만족도 QR 슬라이드
-  return `<div style="width:100%;height:100%;background:${COLORS.bg2};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;position:relative;overflow:hidden">
-    <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:${COLORS.accent2};letter-spacing:-.02em">교육 만족도 조사</div>
+  return `<div style="width:100%;height:100%;background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px;box-sizing:border-box;font-family:'Pretendard',sans-serif;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0;background:rgba(0,30,10,.45)"></div>
+      <div style="position:relative;z-index:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:16px">
+    <div style="font-size:clamp(1.4rem,3vw,2.2rem);font-weight:900;color:#fff;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.5)">교육 만족도 조사</div>
     <div style="background:#fff;border-radius:16px;padding:28px 40px;display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:0 2px 16px rgba(0,0,0,.08)">
       <div style="font-size:clamp(.9rem,2vw,1.25rem);font-weight:800;color:#222;text-align:center;line-height:1.5">
         여러분의 의견이 교육개발에 큰 도움이 됩니다.<br>
