@@ -1017,7 +1017,7 @@ function vTrainings(){
        <button class="btn sm" onclick="GUIDE_SEL='${t.id}';GUIDE_SLIDE=0;nav('#/guide')">출석현황</button>
        <button class="btn sm" onclick="openEditTraining('${t.id}')">✏️ 수정</button>
        <button class="btn sm ${t.status==='open'?'danger':''}" onclick="toggleClose('${t.id}')">${t.status==='open'?'응답 마감':'응답 재개'}</button>
-       <button class="btn sm ghost" onclick="deleteTraining('${t.id}')">🗑 삭제</button>
+       <button class="btn sm ghost no-print" onclick="deleteTraining('${t.id}')">🗑 삭제</button>
      </div></td></tr>`;}).join('')}</tbody></table></div>`;
 }
 async function deleteTraining(id){
@@ -1330,7 +1330,6 @@ function toggleAttCol(tid, col){
   if(idx>=0)t.attHideCols.splice(idx,1);
   else t.attHideCols.push(col);
   save();
-  sbPatch('trainings',tid,{attendees:t.attendees});
   render();
 }
 function renderAttRows(){
@@ -1592,7 +1591,7 @@ function vInstructors(){
       <td style="font-size:.83rem;color:var(--ink2);max-width:220px">${esc(i.bio)}</td>
       <td class="row" style="gap:4px">
       <button class="btn sm" onclick="openInstrModal('${i.id}')">수정</button>
-      <button class="btn sm ghost" onclick="deleteInstructor('${i.id}')">🗑</button>
+      <button class="btn sm ghost no-print" onclick="deleteInstructor('${i.id}')">🗑</button>
     </td>
     </tr>`).join('')}</tbody>
   </table></div>
@@ -2068,13 +2067,13 @@ function vReport(){
   if(RPQ===undefined)RPQ='';
   const t=byId(DB.trainings,RPQ);
   const sel=`<div class="row" style="flex-wrap:wrap;margin-bottom:16px">
-   <select class="select" style="max-width:380px" onchange="RPQ=this.value" id="rpqSelect">
+   <select class="select" style="max-width:380px" onchange="RPQ=this.value;render()" id="rpqSelect">
     <option value="">-- 교육을 선택하세요 --</option>
     ${DB.trainings.map(x=>`<option value="${x.id}" ${x.id===RPQ?'selected':''}>${esc(x.name)} ${x.round}차 (${x.date})</option>`).join('')}
    </select>
    <button class="btn primary sm" onclick="RPQ=document.getElementById('rpqSelect').value;render()">🔍 조회</button>
    ${RPQ?`<button class="btn primary sm" onclick="printReport()">📥 다운로드</button>`:``}
-   <button class="btn sm" onclick="openBudget(RPQ)">💰 교육비용 입력</button>
+   <button class="btn sm no-print" onclick="openBudget(RPQ)">💰 교육비용 입력</button>
    <span class="card-sub">2페이지 · 실제 보고서 형식</span></div>`;
   if(!t||!RPQ)return sel+'<div class="empty" style="padding-top:60px;font-size:1.1rem">⬆ 교육을 선택하고 조회하세요</div>';
   const rs=respOf(t.id);const a=DB.ai[t.id]||null;
@@ -2110,6 +2109,7 @@ function vReport(){
       attCols.includes('team')?'':  `<td>${esc(a.team||'')}</td>`,
       attCols.includes('store')?'': `<td>${esc(a.store||'')}</td>`,
       attCols.includes('name')?'':  `<td style="font-weight:600;text-align:center">${esc(a.name||'')}</td>`,
+      attCols.includes('tenure')?'': `<td style="text-align:center;color:#555">${esc(a.tenure||'')}</td>`,
       attCols.includes('tenure')?'':  `<td style="text-align:center;color:#555">${esc(a.tenure||'')}</td>`,
     ].join('');
     return `<tr>${cells}</tr>`;
@@ -2258,7 +2258,7 @@ function vReport(){
     <div contenteditable="${session?'true':'false'}"
       id="rpEtc"
       style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.78rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
-      onblur="const tr=byId(DB.trainings,RPQ);if(tr){tr.reportEtc=this.innerText.trim();save();sbPatch('trainings',RPQ,{agenda_head:tr.agendaHead});}">
+      onblur="const tr=byId(DB.trainings,RPQ);if(tr){tr.reportEtc=this.innerText.trim();save();sbPatch('trainings',RPQ,{agenda_head:tr.agendaHead,subtitle:tr.subtitle||''});}">
       ${esc(t.reportEtc||'')}
     </div>
   </div>
@@ -2401,6 +2401,7 @@ async function printReport(){
     .dl-bar{background:#0e5a34;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:16px}
     .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:700}
     .no-print{display:none!important}.no-print-border{border-bottom:none!important}
+    [contenteditable]{border:none!important;outline:none!important;cursor:default!important}
     @media print{.dl-bar{display:none}}.report-wrap{max-width:800px;margin:0 auto}
     ${allStyles}</style></head><body>
     <div class="dl-bar"><span>📄 ${t.name} ${t.round}차 결과보고서</span>
@@ -2529,7 +2530,7 @@ function vGuide(){
         <td class="num">${esc(c.empNo)}</td>
         <td style="font-weight:700">${esc(c.name)}</td>
         <td class="num" style="color:var(--ink3)">${c.at.slice(11,16)}</td>
-        <td><button class="btn sm ghost" style="padding:2px 6px" onclick="deleteCheckin('${GUIDE_SEL}','${c.empNo}')">🗑</button></td>
+        <td><button class="btn sm ghost no-print" style="padding:2px 6px" onclick="deleteCheckin('${GUIDE_SEL}','${c.empNo}')">🗑</button></td>
       </tr>`).join('')}
       </tbody></table>
     </div>`:''}
@@ -2795,7 +2796,7 @@ function renderAgendaDoc(t){
       ${!attCols.includes('store')?`<td>${esc(a.store)}</td>`:''}
       ${!attCols.includes('name')?`<td style="text-align:center;font-weight:600">${esc(a.name)}</td>`:''}
       ${!attCols.includes('tenure')?`<td style="text-align:center;color:#555">${esc(a.tenure||'')}</td>`:''}
-      ${session?`<td class="no-print"><button class="btn sm ghost" style="padding:2px 5px;font-size:.72rem" onclick="deleteAttendee('${t.id}',${i})">🗑</button></td>`:''}
+      ${session?`<td class="no-print"><button class="btn sm ghost no-print" style="padding:2px 5px;font-size:.72rem" onclick="deleteAttendee('${t.id}',${i})">🗑</button></td>`:''}
     </tr>`).join('')}</tbody>
   </table>`:`<div style="color:#aaa;font-size:.82rem;padding:10px">교육 생성 시 참석자를 등록하면 여기에 표시됩니다.</div>`}
 
@@ -2827,7 +2828,7 @@ function renderAgendaDoc(t){
     <div contenteditable="${session?'true':'false'}"
       id="agEtc"
       style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.82rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
-      onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaEtc=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_head:tr.agendaHead});}">
+      onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaEtc=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_head:tr.agendaHead,subtitle:tr.subtitle||''});}">
       ${esc(t.agendaEtc||'')}
     </div>
   </div>
@@ -2869,7 +2870,9 @@ async function printAgenda(){
     <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#f5f5f5;padding:24px}
     .dl-bar{background:#0e5a34;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:16px}
     .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:700}
-    .no-print{display:none!important}@media print{.dl-bar{display:none}}
+    .no-print{display:none!important}
+    [contenteditable]{border:none!important;outline:none!important;cursor:default!important}
+    @media print{.dl-bar{display:none}}
     .agenda-wrap{max-width:800px;margin:0 auto}${allStyles}</style></head><body>
     <div class="dl-bar"><span>📋 ${t.name} ${t.round}차 교육진행안</span>
     <button onclick="window.print()">🖨️ PDF로 저장</button></div>
