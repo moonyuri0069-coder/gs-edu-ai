@@ -1837,6 +1837,7 @@ function vCourseDash(t){
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
     if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
+    if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
     const k=L.instructorId||L.instructorName||L.title;
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
@@ -2067,6 +2068,7 @@ function vReport(){
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
     if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
+    if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
     const k=L.instructorId||L.instructorName||L.title;
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
@@ -2223,6 +2225,16 @@ function vReport(){
       </table>
     </div>
   </div>
+  <!-- 기타 보고 사항 -->
+  <div style="margin-top:14px;border-top:2px solid #0e5a34;padding-top:10px">
+    <div class="rp-sec">기타 보고 사항</div>
+    <div contenteditable="${session?'true':'false'}"
+      id="rpEtc"
+      style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.78rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
+      onblur="const tr=byId(DB.trainings,RPQ);if(tr){tr.reportEtc=this.innerText.trim();save();sbPatch('trainings',RPQ,{agenda_head:tr.agendaHead});}">
+      ${esc(t.reportEtc||'')}
+    </div>
+  </div>
   <div class="rp-page-end">- 2/2 -</div>
   </div>`;
 }
@@ -2327,7 +2339,7 @@ async function printReport(){
   toast('🤖 AI가 의견을 정제 중...');
   Object.keys(_opinionCache).forEach(k=>delete _opinionCache[k]);
   const rs=respOf(RPQ);
-  const lstats2=t.lectures.filter((L,i,arr)=>!(i===0||i===arr.length-1));
+  const lstats2=t.lectures.filter((L,i,arr)=>!(i===0||i===arr.length-1)&&!(L.title&&L.title.includes('점심식사')));
   for(const L of lstats2){await lectOpinionsAI(L,rs);}
   // html2canvas로 PDF 직접 다운로드
   try{
@@ -2772,6 +2784,16 @@ function renderAgendaDoc(t){
   </table>
   <div style="font-size:.72rem;color:#888;margin-top:4px">→ 전일 숙박이 필요한 경우 국내출장비 기준에 따라 점포별 비용 처리</div>
 
+  <!-- 기타 보고 사항 -->
+  <div style="margin-top:16px;border-top:2px solid #0e5a34;padding-top:10px">
+    <div style="font-weight:800;font-size:.85rem;color:#0e5a34;margin-bottom:6px">기타 보고 사항</div>
+    <div contenteditable="${session?'true':'false'}"
+      id="agEtc"
+      style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.82rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
+      onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaEtc=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_head:tr.agendaHead});}">
+      ${esc(t.agendaEtc||'')}
+    </div>
+  </div>
   <div class="ag-footer">사업기획팀 작성 · ${new Date().toLocaleDateString('ko-KR')}</div>
 </div>`;
 }
@@ -2892,6 +2914,7 @@ async function renderSurvey(tid){
     const seenInstr=new Set();
     const uniqueLects=t.lectures
       .filter((_,i,arr)=>i>0&&i<arr.length-1) // 첫/마지막 제외
+      .filter(L=>!(L.title&&L.title.includes('점심식사'))) // 점심식사 제외
       .filter(L=>{
         // 동일팀+동일강사 조합으로 중복 제거
         const key=L.instructorId||L.instructorName||'';
