@@ -2050,16 +2050,18 @@ async function lectOpinionsAI(L,rsArr){
   return{goods,imps};
 }
 function vReport(){
-  if(!RPQ)RPQ=AIQ||DB.trainings.slice(-1)[0]?.id||'';
+  if(RPQ===undefined)RPQ='';
   const t=byId(DB.trainings,RPQ);
   const sel=`<div class="row" style="flex-wrap:wrap;margin-bottom:16px">
-   <select class="select" style="max-width:380px" onchange="RPQ=this.value;render()">
+   <select class="select" style="max-width:380px" onchange="RPQ=this.value" id="rpqSelect">
+    <option value="">-- 교육을 선택하세요 --</option>
     ${DB.trainings.map(x=>`<option value="${x.id}" ${x.id===RPQ?'selected':''}>${esc(x.name)} ${x.round}차 (${x.date})</option>`).join('')}
    </select>
-   <button class="btn primary sm" onclick="printReport()">📥 다운로드</button>
+   <button class="btn primary sm" onclick="RPQ=document.getElementById('rpqSelect').value;render()">🔍 조회</button>
+   ${RPQ?`<button class="btn primary sm" onclick="printReport()">📥 다운로드</button>`:``}
    <button class="btn sm" onclick="openBudget(RPQ)">💰 교육비용 입력</button>
    <span class="card-sub">2페이지 · 실제 보고서 형식</span></div>`;
-  if(!t)return sel+'<div class="empty">보고 가능한 교육이 없습니다</div>';
+  if(!t||!RPQ)return sel+'<div class="empty" style="padding-top:60px;font-size:1.1rem">⬆ 교육을 선택하고 조회하세요</div>';
   const rs=respOf(t.id);const a=DB.ai[t.id]||null;
   // lstats: 첫/마지막 제외 + 동일강사 중복 제거
   const _seenL=new Set();
@@ -2438,6 +2440,7 @@ function vGuide(){
       <div>
         <div style="font-weight:800;margin-bottom:6px">교육 선택</div>
         <select class="select" style="min-width:280px" onchange="GUIDE_SEL=this.value;GUIDE_SLIDE=0;render()">
+          <option value="">-- 교육을 선택하세요 --</option>
           ${trainings.map(tr=>`<option value="${tr.id}" ${GUIDE_SEL===tr.id?'selected':''}>${esc(tr.name)} ${tr.round}차 (${tr.date}) ${tr.status==='open'?'🟢':''}</option>`).join('')}
         </select>
       </div>
@@ -2667,23 +2670,24 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
 let AQ=''; // 선택된 교육 ID
 function vAgenda(){
   const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
-  if(!AQ&&list.length)AQ=list[0].id;
-  if(AQ&&!byId(DB.trainings,AQ)&&list.length)AQ=list[0].id;
+  if(AQ&&!byId(DB.trainings,AQ))AQ='';
   const t=AQ?byId(DB.trainings,AQ):null;
   const sel=`<div class="card card-pad" style="margin-bottom:14px">
     <div class="spread" style="flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-weight:800;margin-bottom:6px">교육 선택</div>
-        <select class="select" style="min-width:280px" onchange="AQ=this.value;render()">
+        <select class="select" style="min-width:280px" onchange="AQ=this.value" id="aqSelect">
+          <option value="">-- 교육을 선택하세요 --</option>
           ${list.map(tr=>`<option value="${tr.id}" ${AQ===tr.id?'selected':''}>${esc(tr.name)} ${tr.round}차 (${tr.date})</option>`).join('')}
         </select>
       </div>
       <div class="row" style="gap:8px">
-        ${t?`<button class="btn primary sm" onclick="printAgenda()">📥 다운로드</button>`:''}
+        <button class="btn primary sm" onclick="AQ=document.getElementById('aqSelect').value;render()">🔍 조회</button>
+        ${t?`<button class="btn primary sm" onclick="printAgenda()">📥 다운로드</button>`:``}
       </div>
     </div>
   </div>`;
-  if(!t)return sel+'<div class="empty">교육을 선택해주세요</div>';
+  if(!t||!AQ)return sel+'<div class="empty" style="padding-top:60px;font-size:1.1rem">⬆ 교육을 선택하고 조회하세요</div>';
   return sel+renderAgendaDoc(t);
 }
 
