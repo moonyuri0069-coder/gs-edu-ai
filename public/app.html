@@ -2772,35 +2772,48 @@ function renderAgendaDoc(t){
 </div>`;
 }
 
-function printAgenda(){
+async function printAgenda(){
   const doc=document.getElementById('agendaDoc');
   if(!doc||!AQ){toast('교육을 먼저 선택해주세요');return;}
   const t=byId(DB.trainings,AQ);
   if(!t){toast('교육을 먼저 선택해주세요');return;}
-  const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
-    .flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join('\n');
-  const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-  <title>${t.name} ${t.round}차 교육진행안</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Pretendard','Malgun Gothic',sans-serif;background:#f5f5f5;padding:24px}
-    .agenda-wrap{max-width:800px;margin:0 auto}
-    .dl-bar{background:#0e5a34;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:16px;font-family:'Pretendard',sans-serif}
-    .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:700;font-size:.9rem}
-    .no-print{display:none!important}
-    @media print{.dl-bar{display:none}.no-print{display:none!important}}
-    ${allStyles}
-  </style>
-  </head><body>
-  <div class="dl-bar">
-    <span>📋 ${t.name} ${t.round}차 교육진행안</span>
-    <button onclick="window.print()">🖨️ PDF로 저장</button>
-  </div>
-  <div class="agenda-wrap">${doc.outerHTML}</div>
-  </body></html>`);
-  w.document.close();
+  try{
+    toast('📄 PDF 생성 중...(잠시 기다려주세요)');
+    const canvas=await html2canvas(doc,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
+    const imgData=canvas.toDataURL('image/jpeg',0.95);
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const pdfW=pdf.internal.pageSize.getWidth();
+    const pdfH=pdf.internal.pageSize.getHeight();
+    const ratio=pdfW/canvas.width;
+    const totalH=canvas.height*ratio;
+    let y=0;
+    while(y<totalH){
+      if(y>0)pdf.addPage();
+      pdf.addImage(imgData,'JPEG',0,-y,pdfW,totalH);
+      y+=pdfH;
+    }
+    pdf.save(`${t.name}_${t.round}차_교육진행안.pdf`);
+    toast('✅ PDF 다운로드 완료!');
+  }catch(e){
+    console.error('PDF 오류:',e);
+    toast('⚠️ PDF 생성 실패 - 미리보기로 전환');
+    const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
+      .flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join('\n');
+    const w=window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>${t.name} ${t.round}차 교육진행안</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#f5f5f5;padding:24px}
+    .dl-bar{background:#0e5a34;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:16px}
+    .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:700}
+    .no-print{display:none!important}@media print{.dl-bar{display:none}}
+    .agenda-wrap{max-width:800px;margin:0 auto}${allStyles}</style></head><body>
+    <div class="dl-bar"><span>📋 ${t.name} ${t.round}차 교육진행안</span>
+    <button onclick="window.print()">🖨️ PDF로 저장</button></div>
+    <div class="agenda-wrap">${doc.outerHTML}</div>
+    </body></html>`);
+    w.document.close();
+  }
 }
 
 /* ═══════════ 설정 ═══════════ */
