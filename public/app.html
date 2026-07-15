@@ -291,7 +291,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 #slideScale *{font-size:100%!important}
 </style>
 </head>
-<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <body>
 <div id="app"></div>
 <div class="toast" id="toast"></div>
@@ -2056,7 +2057,6 @@ function vReport(){
     ${DB.trainings.map(x=>`<option value="${x.id}" ${x.id===RPQ?'selected':''}>${esc(x.name)} ${x.round}차 (${x.date})</option>`).join('')}
    </select>
    <button class="btn primary sm" onclick="printReport()">📥 다운로드</button>
-   <button class="btn sm" onclick="exportPPT()" style="background:#c9541a;color:#fff">📊 PPT</button>
    <button class="btn sm" onclick="openBudget(RPQ)">💰 교육비용 입력</button>
    <span class="card-sub">2페이지 · 실제 보고서 형식</span></div>`;
   if(!t)return sel+'<div class="empty">보고 가능한 교육이 없습니다</div>';
@@ -2317,101 +2317,6 @@ function removePhoto(tid,idx){
   sbPatch('trainings',tid,{photos:t.photos});
   save();render();toast('사진이 삭제되었습니다');
 }
-async function exportPPT(){
-  if(!RPQ){toast('교육을 먼저 선택해주세요');return;}
-  const t=byId(DB.trainings,RPQ);
-  if(!t){toast('교육을 먼저 선택해주세요');return;}
-  const rs=respOf(RPQ);
-  const a=DB.ai[t.id]||null;
-  const _lstats=t.lectures.filter((L,i,arr)=>{
-    if(i===0||i===arr.length-1)return false;
-    const k=L.instructorId||L.instructorName||L.title;
-    return k;
-  }).map(L=>({L,s:lectureAvg(t.id,L.id)}));
-  const evalWithResp=_lstats.filter(x=>x.s.n>0);
-  const ex=avg(evalWithResp.map(x=>x.s.expert));
-  const pr=avg(evalWithResp.map(x=>x.s.practical));
-  const totalV=trainingAvg(RPQ);
-  const rate=trainingRate(t);
-
-  toast('📊 PPT 생성 중...');
-
-  const pptx=new PptxGenJS();
-  pptx.layout='LAYOUT_16x9';
-
-  const GRN='#0e5a34';
-  const LGRY='#f5f7f5';
-  const WHT='#ffffff';
-  const BLK='#1a1a1a';
-
-  // ── 슬라이드 1: 표지 ──
-  const s1=pptx.addSlide();
-  s1.background={color:GRN};
-  s1.addText(`${t.name}`,{x:0.5,y:1.2,w:9,h:1.2,fontSize:36,bold:true,color:WHT,align:'center'});
-  s1.addText(`${t.round}차수 집합교육 결과보고`,{x:0.5,y:2.5,w:9,h:0.8,fontSize:24,color:'#a8d5b8',align:'center'});
-  s1.addText(`📅 ${t.date}  |  📍 ${t.place||''}`,{x:0.5,y:3.5,w:9,h:0.6,fontSize:16,color:'#c8e6c9',align:'center'});
-  s1.addText(`참석 ${(t.checkins||[]).length}명 / 교육대상자 ${t.invited||0}명`,{x:0.5,y:4.2,w:9,h:0.5,fontSize:14,color:'#a8d5b8',align:'center'});
-
-  // ── 슬라이드 2: KPI ──
-  const s2=pptx.addSlide();
-  s2.background={color:LGRY};
-  s2.addText('교육 만족도 핵심 지표',{x:0.5,y:0.3,w:9,h:0.7,fontSize:24,bold:true,color:GRN,align:'center'});
-  const kpis=[
-    {label:'평균 만족도',val:f1(totalV)+' / 5.0',color:'#0e5a34'},
-    {label:'전문성·전달력',val:f1(ex)+' / 5.0',color:'#1976d2'},
-    {label:'실무 적용성',val:f1(pr)+' / 5.0',color:'#7b1fa2'},
-    {label:'응답 인원',val:rs.length+'명',color:'#c62828'},
-    {label:'응답률',val:pct(rate),color:'#e65100'},
-  ];
-  kpis.forEach((k,i)=>{
-    const x=0.3+(i%3)*3.1, y=i<3?1.2:3.2;
-    s2.addShape(pptx.ShapeType.rect,{x,y,w:2.8,h:1.6,fill:{color:WHT},line:{color:'#dddddd',pt:1}});
-    s2.addText(k.val,{x,y:y+0.2,w:2.8,h:0.8,fontSize:28,bold:true,color:k.color,align:'center'});
-    s2.addText(k.label,{x,y:y+1.0,w:2.8,h:0.4,fontSize:12,color:'#666666',align:'center'});
-  });
-
-  // ── 슬라이드 3: 교육 일정 ──
-  const s3=pptx.addSlide();
-  s3.addText('교육 일정',{x:0.5,y:0.3,w:9,h:0.6,fontSize:22,bold:true,color:GRN});
-  const rows=[
-    [{text:'교육시간',options:{bold:true,color:WHT,fill:{color:GRN}}},{text:'과정명',options:{bold:true,color:WHT,fill:{color:GRN}}},{text:'교육팀',options:{bold:true,color:WHT,fill:{color:GRN}}},{text:'강사',options:{bold:true,color:WHT,fill:{color:GRN}}}],
-    ...t.lectures.map(L=>{
-      const ins=byId(DB.instructors,L.instructorId);
-      return [{text:L.slot||''},{text:L.title},{text:L.field||ins?.field||''},{text:L.instructorName||ins?.name||''}];
-    })
-  ];
-  s3.addTable(rows,{x:0.5,y:1.1,w:9,colW:[2,3.5,1.8,1.7],fontSize:11,border:{pt:1,color:'#dddddd'},autoPage:true});
-
-  // ── 슬라이드 4: 강의별 주요 의견 ──
-  const s4=pptx.addSlide();
-  s4.addText('강의별 주요 의견',{x:0.5,y:0.3,w:9,h:0.6,fontSize:22,bold:true,color:GRN});
-  let yPos=1.1;
-  _lstats.forEach(({L})=>{
-    if(yPos>6.5)return;
-    const ins=byId(DB.instructors,L.instructorId);
-    const{goods,imps}=lectOpinions(L,rs);
-    const opinions=[...goods,...imps].slice(0,3).join(' / ')||'의견 없음';
-    s4.addText(`${L.title} (${L.instructorName||ins?.name||''})`,{x:0.5,y:yPos,w:9,h:0.4,fontSize:13,bold:true,color:GRN});
-    s4.addText(opinions,{x:0.7,y:yPos+0.4,w:8.6,h:0.5,fontSize:11,color:BLK});
-    yPos+=1.1;
-  });
-
-  // ── 슬라이드 5: AI 종합 의견 ──
-  if(a?.summary){
-    const s5=pptx.addSlide();
-    s5.background={color:LGRY};
-    s5.addText('AI 종합 의견',{x:0.5,y:0.3,w:9,h:0.6,fontSize:22,bold:true,color:GRN});
-    s5.addText(a.summary||'',{x:0.5,y:1.1,w:9,h:3.0,fontSize:13,color:BLK,valign:'top',wrap:true});
-    s5.addText('향후 개선계획',{x:0.5,y:4.2,w:9,h:0.5,fontSize:16,bold:true,color:GRN});
-    s5.addText(a.plan||'',{x:0.5,y:4.8,w:9,h:1.5,fontSize:13,color:BLK,valign:'top',wrap:true});
-  }
-
-  // 저장
-  const fname=`${t.name}_${t.round}차_결과보고서.pptx`;
-  await pptx.writeFile({fileName:fname});
-  toast('📊 PPT 다운로드 완료!');
-}
-
 async function printReport(){
   const doc=document.getElementById('reportA4');
   if(!doc||!RPQ){toast('교육을 먼저 선택해주세요');return;}
