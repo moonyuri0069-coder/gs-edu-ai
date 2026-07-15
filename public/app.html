@@ -220,192 +220,20 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
 @media print{
   .print-agenda .side,.print-agenda .topbar,.print-agenda .card,.print-agenda .content>*:not(#agendaDoc){display:none!important}
-  .print-agenda 
-@keyframes gs-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes gs-wave{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
-@keyframes gs-blink{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
-@keyframes gs-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
-.gs-char-bounce{animation:gs-bounce 1.5s ease-in-out infinite}
-.gs-char-wave{animation:gs-wave 2s ease-in-out infinite;transform-origin:bottom center}
-.gs-char-float{animation:gs-float 2.5s ease-in-out infinite}
-
-.agenda-a4{box-shadow:none!important;border:none!important;width:100%!important;padding:16px!important}
-}
-.report-a4{
-  background:#fff;color:#141714;width:794px;margin:0 auto;
-  padding:28px 32px 36px;border:1px solid var(--border);box-shadow:var(--shadow);border-radius:4px;
-  font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif;
-}
-/* 1페이지 */
-.rp-p1-title{font-size:1.3rem;font-weight:900;letter-spacing:-.02em;margin-bottom:7px}
-.rp-subtitle{font-size:.82rem;background:#f0f4f1;border-left:4px solid #0e5a34;
-  padding:7px 12px;margin-bottom:10px;color:#1a2e1a;font-weight:600;line-height:1.45}
-.rp-three{display:grid;grid-template-columns:1.15fr .85fr 1fr;gap:10px;margin-bottom:8px}
-.rp-section-box{border:1.5px solid #cdd8cb;border-radius:8px;overflow:hidden}
-.rp-section-head{background:#0e5a34;color:#fff;font-size:.78rem;font-weight:800;
-  padding:5px 10px;letter-spacing:.04em;text-align:center}
-.rp-section-body{padding:8px 10px;font-size:.78rem;background:#fff}
-.rp-sched{width:100%;border-collapse:collapse;font-size:.72rem}
-.rp-sched th{background:#e8f2ec;font-weight:800;padding:3px 6px;border:1px solid #cdd8cb;text-align:center!important;color:#0e5a34}
-.rp-sched td{padding:3px 6px;border:1px solid #e4e7e2;vertical-align:top;line-height:1.3}
-.rp-sched .lunch{background:#fafafa;color:#999;text-align:center;font-style:italic}
-.rp-att{width:100%;border-collapse:collapse;font-size:.72rem}
-.rp-att th{background:#e8f2ec;font-weight:800;padding:3px 6px;border:1px solid #cdd8cb;text-align:center!important;color:#0e5a34}
-.rp-att td{padding:3px 6px;border:1px solid #e4e7e2;text-align:center}
-.rp-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-.rp-photo-ph{background:#f0f4f1;border-radius:4px;aspect-ratio:4/3;
-  display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#aaa;border:1px dashed #cdd8cb}
-/* 페이지 구분선 */
-.rp-two-top{display:grid;grid-template-columns:1.1fr 1fr;gap:10px;margin-bottom:8px}
-.rp-photos-full{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
-.rp-photo-ph-sm{background:#f0f4f1;border-radius:8px;aspect-ratio:4/3;min-height:120px;
-  display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#aaa;border:1px dashed #cdd8cb}
-.rp-page-break{border:none;border-top:2px dashed #e4e7e2;margin:16px 0;position:relative}
-.rp-page-break::after{content:'- 1/2 -';position:absolute;right:0;top:-10px;
-  font-size:.72rem;color:#aaa;background:#fff;padding:0 6px}
-/* 2페이지 */
-.rp-p2-title{font-size:1.05rem;font-weight:900;margin-bottom:8px;letter-spacing:-.01em;
-  border-bottom:2.5px solid #0e5a34;padding-bottom:6px}
-.rp-two{display:grid;grid-template-columns:1.15fr .85fr;gap:12px}
-.rp-sec{font-size:.75rem;font-weight:800;color:#fff;background:#0e5a34;
-  padding:3px 10px;border-radius:4px;margin-bottom:6px;letter-spacing:.03em;display:inline-block}
-.rp-opinion-table{width:100%;border-collapse:collapse;font-size:.74rem}
-.rp-opinion-table th{background:#e8f2ec;color:#0e5a34;font-weight:800;padding:4px 8px;
-  border:1px solid #cdd8cb;text-align:center!important}
-.rp-opinion-table td{padding:4px 8px;border:1px solid #e4e7e2;vertical-align:top;line-height:1.4}
-.editable-opinion{min-height:1em;}.rp-opinion-table td.lname{font-weight:700;color:#0e5a34;white-space:nowrap;font-size:.72rem;text-align:center}
-.rp-opinion-table ul{margin:0;padding-left:12px}
-.rp-opinion-table li{margin-bottom:2px}
-.rp-opinion-table li.hi{color:#0e5a34;font-weight:700}
-/* 추천 강의 바 차트 */
-.rec-bar-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:.74rem}
-.rec-bar-label{width:130px;flex:0 0 auto;font-weight:600;color:#333;line-height:1.3}
-.rec-bar-track{flex:1;background:#eef2ee;border-radius:4px;height:14px;overflow:hidden}
-.rec-bar-fill{height:100%;background:#16a34a;border-radius:4px;transition:.3s}
-.rec-bar-fill.best{background:#0e5a34}
-.rec-bar-num{width:28px;text-align:right;font-weight:800;color:#0e5a34}
-/* 비용표 */
-.rp-cost{width:100%;border-collapse:collapse;font-size:.75rem;margin-top:4px}
-.rp-cost th{background:#e8f2ec;color:#0e5a34;font-weight:800;padding:4px 8px;
-  border:1px solid #cdd8cb;text-align:center}
-.rp-cost td{padding:4px 8px;border:1px solid #e4e7e2;text-align:right}
-.rp-cost td.lbl{text-align:center;font-weight:700;font-size:.73rem}
-.rp-cost tr.total td{font-weight:800;background:#f0f4f1}
-.rp-cost .minus{color:#1a7a40}
-.rp-cost .plus{color:#b4433a}
-/* 필요 강의/기타 */
-.rp-needs{font-size:.74rem;line-height:1.6;color:#2c322d;
-  background:#f8f9f7;border:1px solid #e0e8de;border-radius:6px;padding:7px 10px}
-/* KPI 배지 행 */
-.rp-kpi-row{display:flex;gap:6px;margin:8px 0}
-.rp-kpi-badge{flex:1;border:1.5px solid #cdd8cb;border-radius:6px;padding:5px 6px;text-align:center}
-.rp-kpi-badge .k-val{font-size:1.05rem;font-weight:900;color:#0e5a34}
-.rp-kpi-badge .k-lbl{font-size:.65rem;color:#79807a;font-weight:700}
-/* AI 종합 */
-.rp-ai-box{background:#f0f4f1;border-left:4px solid #16a34a;border-radius:0 6px 6px 0;
-  padding:7px 10px;font-size:.76rem;line-height:1.55;color:#1a2e1a}
-/* 페이지2 끝 표기 */
-.rp-page-end{text-align:center;color:#aaa;font-size:.72rem;margin-top:18px}
-
-@media print{
-  body{background:#fff}
-  body.print-report *{visibility:hidden}
-  body.print-report .report-a4,body.print-report .report-a4 *{visibility:visible}
-  body.print-report 
-@keyframes gs-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes gs-wave{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
-@keyframes gs-blink{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
-@keyframes gs-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
-.gs-char-bounce{animation:gs-bounce 1.5s ease-in-out infinite}
-.gs-char-wave{animation:gs-wave 2s ease-in-out infinite;transform-origin:bottom center}
-.gs-char-float{animation:gs-float 2.5s ease-in-out infinite}
-
-.agenda-a4{
-  background:#fff;color:#141714;width:794px;margin:0 auto;
-  padding:32px 36px 40px;border:1px solid var(--border);box-shadow:var(--shadow);border-radius:4px;
-  font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;
-}
-.ag-title{font-size:1.25rem;font-weight:900;letter-spacing:-.02em;text-align:center;
-  padding:10px 0 8px;border-bottom:2.5px solid #0e5a34;margin-bottom:10px;color:#0e5a34}
-.ag-head{font-size:.84rem;background:#f0f4f1;border-left:4px solid #0e5a34;
-  padding:7px 14px;margin-bottom:14px;color:#1a2e1a;font-weight:600;line-height:1.5;border-radius:0 4px 4px 0}
-.ag-info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
-.ag-info-box{border:1.5px solid #cdd8cb;border-radius:6px;overflow:hidden}
-.ag-info-label{background:#0e5a34;color:#fff;font-size:.72rem;font-weight:800;
-  padding:4px 10px;letter-spacing:.04em;text-align:center}
-.ag-info-val{padding:7px 10px;font-size:.82rem;font-weight:700;text-align:center;min-height:36px;
-  display:flex;align-items:center;justify-content:center}
-.ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
-  border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
-.ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center!important}
-.ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4;text-align:center}
-.ag-table tr:nth-child(even) td{background:#f8faf7}
-.ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
-@media print{
-  .print-agenda .side,.print-agenda .topbar,.print-agenda .card,.print-agenda .content>*:not(#agendaDoc){display:none!important}
-  .print-agenda 
-@keyframes gs-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes gs-wave{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
-@keyframes gs-blink{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
-@keyframes gs-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
-.gs-char-bounce{animation:gs-bounce 1.5s ease-in-out infinite}
-.gs-char-wave{animation:gs-wave 2s ease-in-out infinite;transform-origin:bottom center}
-.gs-char-float{animation:gs-float 2.5s ease-in-out infinite}
-
-.agenda-a4{box-shadow:none!important;border:none!important;width:100%!important;padding:16px!important}
-}
-.report-a4{position:fixed;inset:0;margin:0;border:none;box-shadow:none;width:100%;padding:14mm 16mm}
-  body.print-report .rp-page-break{page-break-after:always;border:none;margin:0}
-  body.print-report .rp-page-break::after{display:none}
-  @page{size:A4;margin:0}
+  .print-agenda #agendaDoc{display:block!important;width:100%;box-shadow:none}
+  .print-report .side,.print-report .topbar,.print-report .card,.print-report .content>*:not(#reportA4){display:none!important}
+  .print-report #reportA4{display:block!important;width:100%;box-shadow:none}
+  .no-print{display:none!important}
+  .no-print-border{border-bottom:none!important;cursor:default!important}
 }
 
-/* 반응형 */
-.menu-btn{display:none}
-@media (max-width:960px){
-  .g4{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(2,1fr)}
-  .sidebar{position:fixed;left:-240px;transition:left .2s;z-index:60}
-  .sidebar.open{left:0}
-  .menu-btn{display:inline-flex}
-  .content{padding:18px 14px 60px}
-}
 @media (max-width:620px){
   .g4,.g3,.g2,.rp-two{grid-template-columns:1fr}
-  
-@keyframes gs-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes gs-wave{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
-@keyframes gs-blink{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
-@keyframes gs-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
-.gs-char-bounce{animation:gs-bounce 1.5s ease-in-out infinite}
-.gs-char-wave{animation:gs-wave 2s ease-in-out infinite;transform-origin:bottom center}
-.gs-char-float{animation:gs-float 2.5s ease-in-out infinite}
-
-.agenda-a4{
-  background:#fff;color:#141714;width:794px;margin:0 auto;
-  padding:32px 36px 40px;border:1px solid var(--border);box-shadow:var(--shadow);border-radius:4px;
-  font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+  .rp-two-top{grid-template-columns:1fr}
+  .dash-kpi{grid-template-columns:repeat(2,1fr)}
+  .nav-label{display:none}
+  .content{padding:18px 14px 60px}
 }
-.ag-title{font-size:1.25rem;font-weight:900;letter-spacing:-.02em;text-align:center;
-  padding:10px 0 8px;border-bottom:2.5px solid #0e5a34;margin-bottom:10px;color:#0e5a34}
-.ag-head{font-size:.84rem;background:#f0f4f1;border-left:4px solid #0e5a34;
-  padding:7px 14px;margin-bottom:14px;color:#1a2e1a;font-weight:600;line-height:1.5;border-radius:0 4px 4px 0}
-.ag-info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
-.ag-info-box{border:1.5px solid #cdd8cb;border-radius:6px;overflow:hidden}
-.ag-info-label{background:#0e5a34;color:#fff;font-size:.72rem;font-weight:800;
-  padding:4px 10px;letter-spacing:.04em;text-align:center}
-.ag-info-val{padding:7px 10px;font-size:.82rem;font-weight:700;text-align:center;min-height:36px;
-  display:flex;align-items:center;justify-content:center}
-.ag-section-title{font-size:.82rem;font-weight:900;color:#0e5a34;
-  border-bottom:1.5px solid #0e5a34;padding-bottom:4px;margin-bottom:8px;letter-spacing:.03em}
-.ag-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-bottom:6px}
-.ag-table th{background:#0e5a34;color:#fff;padding:5px 10px;font-weight:800;text-align:center!important}
-.ag-table td{padding:5px 10px;border:1px solid #e4e7e2;line-height:1.4;text-align:center}
-.ag-table tr:nth-child(even) td{background:#f8faf7}
-.ag-footer{margin-top:16px;text-align:right;font-size:.72rem;color:#aaa;border-top:1px solid #eee;padding-top:8px}
-@media print{
-  .print-agenda .side,.print-agenda .topbar,.print-agenda .card,.print-agenda .content>*:not(#agendaDoc){display:none!important}
-  .print-agenda 
 @keyframes gs-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 @keyframes gs-wave{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
 @keyframes gs-blink{0%,90%,100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
@@ -420,9 +248,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* 교육생안내 미리보기 폰트 축소 */
-#slideScale *{font-size:50%!important}
+#slideScale *{font-size:100%!important}
 </style>
 </head>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <body>
 <div id="app"></div>
 <div class="toast" id="toast"></div>
@@ -634,7 +463,7 @@ ${etcs.slice(0,10).join('\n')}
 
   try{
     const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AQ.Ab8RN6K3WVT1c56fBJzsFC4OHTZ7Tr1ub0oYrsmr3CTgjrxf_Q`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
       {method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})}
     );
@@ -2065,7 +1894,7 @@ function dlAI(tid){const t=byId(DB.trainings,tid),a=getAI(tid);if(!a)return;
   const rows=[['구분','내용','빈도']];
   a.topPos.forEach(([k,c])=>rows.push(['좋았던 점',k,c]));a.topImp.forEach(([k,c])=>rows.push(['개선사항',k,c]));
   a.recTop.forEach(([lid,c])=>rows.push(['추천 강의',lectOf(t,lid)?.title||lid,c]));
-  rows.push(['긍정률',pct(a.posRate),''],['의견 수',a.nOpinions,''],['AI 종합 의견',a.summary,''],['향후 개선계획',a.plan,'']);
+  rows.push(['긍정률',pct(a.posRate),''],['의견 수',a.nOpinions,''],['AI 종합 의견',(a?.summary||''),''],['향후 개선계획',(a?.plan||''),'']);
   csv(rows,`AI분석_${t.name}_${t.round}차.csv`);}
 
 /* ═══════════ AI 분석 ═══════════ */
@@ -2087,7 +1916,7 @@ function vAI(){
   <div class="card card-pad ai-card">
    <div class="ai-eyebrow">✦ AI SUMMARY · ${esc(t.name)} ${t.round}차</div>
    <div class="ai-headline">${esc((a?.summary||'').split('.')[0])}.</div>
-   <div style="font-size:.9rem;color:var(--ink2);line-height:1.7">${esc(a.summary)}</div>
+   <div style="font-size:.9rem;color:var(--ink2);line-height:1.7">${esc(a?.summary||'')}</div>
    <div class="divider"></div>
    <div class="row" style="gap:22px;flex-wrap:wrap">
      <span style="font-size:.83rem"><i class="legend-dot" style="background:var(--green-b)"></i>긍정 ${pct(a.posRate)}</span>
@@ -2187,10 +2016,11 @@ function vReport(){
     ${DB.trainings.map(x=>`<option value="${x.id}" ${x.id===RPQ?'selected':''}>${esc(x.name)} ${x.round}차 (${x.date})</option>`).join('')}
    </select>
    <button class="btn primary sm" onclick="printReport()">📥 다운로드</button>
+   <button class="btn sm" onclick="exportPPT()" style="background:#c9541a;color:#fff">📊 PPT</button>
    <button class="btn sm" onclick="openBudget(RPQ)">💰 교육비용 입력</button>
    <span class="card-sub">2페이지 · 실제 보고서 형식</span></div>`;
   if(!t)return sel+'<div class="empty">보고 가능한 교육이 없습니다</div>';
-  const rs=respOf(t.id);const a=getAI(RPQ);
+  const rs=respOf(t.id);const a=DB.ai[t.id]||null;
   // lstats: 첫/마지막 제외 + 동일강사 중복 제거
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
@@ -2326,7 +2156,7 @@ function vReport(){
         </div>
       </div>
       <div style="margin-top:12px"><div class="rp-sec">AI 종합 의견</div>
-        <div class="rp-ai-box">${esc(a.summary)}<br><br><b>향후 개선계획:</b> ${esc(a.plan)}</div>
+        <div class="rp-ai-box">${esc(a?.summary||'')}<br><br><b>향후 개선계획:</b> ${esc(a?.plan||'')}</div>
       </div>
     </div>
     <div>
@@ -2447,6 +2277,101 @@ function removePhoto(tid,idx){
   sbPatch('trainings',tid,{photos:t.photos});
   save();render();toast('사진이 삭제되었습니다');
 }
+async function exportPPT(){
+  if(!RPQ){toast('교육을 먼저 선택해주세요');return;}
+  const t=byId(DB.trainings,RPQ);
+  if(!t){toast('교육을 먼저 선택해주세요');return;}
+  const rs=respOf(RPQ);
+  const a=DB.ai[t.id]||null;
+  const _lstats=t.lectures.filter((L,i,arr)=>{
+    if(i===0||i===arr.length-1)return false;
+    const k=L.instructorId||L.instructorName||L.title;
+    return k;
+  }).map(L=>({L,s:lectureAvg(t.id,L.id)}));
+  const evalWithResp=_lstats.filter(x=>x.s.n>0);
+  const ex=avg(evalWithResp.map(x=>x.s.expert));
+  const pr=avg(evalWithResp.map(x=>x.s.practical));
+  const totalV=trainingAvg(RPQ);
+  const rate=trainingRate(t);
+
+  toast('📊 PPT 생성 중...');
+
+  const pptx=new PptxGenJS();
+  pptx.layout='LAYOUT_16x9';
+
+  const GRN='#0e5a34';
+  const LGRY='#f5f7f5';
+  const WHT='#ffffff';
+  const BLK='#1a1a1a';
+
+  // ── 슬라이드 1: 표지 ──
+  const s1=pptx.addSlide();
+  s1.background={color:GRN};
+  s1.addText(`${t.name}`,{x:0.5,y:1.2,w:9,h:1.2,fontSize:36,bold:true,color:WHT,align:'center'});
+  s1.addText(`${t.round}차수 집합교육 결과보고`,{x:0.5,y:2.5,w:9,h:0.8,fontSize:24,color:'#a8d5b8',align:'center'});
+  s1.addText(`📅 ${t.date}  |  📍 ${t.place||''}`,{x:0.5,y:3.5,w:9,h:0.6,fontSize:16,color:'#c8e6c9',align:'center'});
+  s1.addText(`참석 ${(t.checkins||[]).length}명 / 교육대상자 ${t.invited||0}명`,{x:0.5,y:4.2,w:9,h:0.5,fontSize:14,color:'#a8d5b8',align:'center'});
+
+  // ── 슬라이드 2: KPI ──
+  const s2=pptx.addSlide();
+  s2.background={color:LGRY};
+  s2.addText('교육 만족도 핵심 지표',{x:0.5,y:0.3,w:9,h:0.7,fontSize:24,bold:true,color:GRN,align:'center'});
+  const kpis=[
+    {label:'평균 만족도',val:f1(totalV)+' / 5.0',color:'#0e5a34'},
+    {label:'전문성·전달력',val:f1(ex)+' / 5.0',color:'#1976d2'},
+    {label:'실무 적용성',val:f1(pr)+' / 5.0',color:'#7b1fa2'},
+    {label:'응답 인원',val:rs.length+'명',color:'#c62828'},
+    {label:'응답률',val:pct(rate),color:'#e65100'},
+  ];
+  kpis.forEach((k,i)=>{
+    const x=0.3+(i%3)*3.1, y=i<3?1.2:3.2;
+    s2.addShape(pptx.ShapeType.rect,{x,y,w:2.8,h:1.6,fill:{color:WHT},line:{color:'#ddd',pt:1}});
+    s2.addText(k.val,{x,y:y+0.2,w:2.8,h:0.8,fontSize:28,bold:true,color:k.color,align:'center'});
+    s2.addText(k.label,{x,y:y+1.0,w:2.8,h:0.4,fontSize:12,color:'#666',align:'center'});
+  });
+
+  // ── 슬라이드 3: 교육 일정 ──
+  const s3=pptx.addSlide();
+  s3.addText('교육 일정',{x:0.5,y:0.3,w:9,h:0.6,fontSize:22,bold:true,color:GRN});
+  const rows=[
+    [{text:'교육시간',options:{bold:true,color:WHT,fill:{color:GRN}}},{text:'과정명',options:{bold:true,color:WHT,fill:{color:GRN}}},{text:'교육팀',options:{bold:true,color:WHT,fill:{color:GRN}}},{text:'강사',options:{bold:true,color:WHT,fill:{color:GRN}}}],
+    ...t.lectures.map(L=>{
+      const ins=byId(DB.instructors,L.instructorId);
+      return [{text:L.slot||''},{text:L.title},{text:L.field||ins?.field||''},{text:L.instructorName||ins?.name||''}];
+    })
+  ];
+  s3.addTable(rows,{x:0.5,y:1.1,w:9,colW:[2,3.5,1.8,1.7],fontSize:11,border:{pt:1,color:'#ddd'},autoPage:true});
+
+  // ── 슬라이드 4: 강의별 주요 의견 ──
+  const s4=pptx.addSlide();
+  s4.addText('강의별 주요 의견',{x:0.5,y:0.3,w:9,h:0.6,fontSize:22,bold:true,color:GRN});
+  let yPos=1.1;
+  _lstats.forEach(({L})=>{
+    if(yPos>6.5)return;
+    const ins=byId(DB.instructors,L.instructorId);
+    const{goods,imps}=lectOpinions(L,rs);
+    const opinions=[...goods,...imps].slice(0,3).join(' / ')||'의견 없음';
+    s4.addText(`${L.title} (${L.instructorName||ins?.name||''})`,{x:0.5,y:yPos,w:9,h:0.4,fontSize:13,bold:true,color:GRN});
+    s4.addText(opinions,{x:0.7,y:yPos+0.4,w:8.6,h:0.5,fontSize:11,color:BLK});
+    yPos+=1.1;
+  });
+
+  // ── 슬라이드 5: AI 종합 의견 ──
+  if(a?.summary){
+    const s5=pptx.addSlide();
+    s5.background={color:LGRY};
+    s5.addText('AI 종합 의견',{x:0.5,y:0.3,w:9,h:0.6,fontSize:22,bold:true,color:GRN});
+    s5.addText(a.summary||'',{x:0.5,y:1.1,w:9,h:3.0,fontSize:13,color:BLK,valign:'top',wrap:true});
+    s5.addText('향후 개선계획',{x:0.5,y:4.2,w:9,h:0.5,fontSize:16,bold:true,color:GRN});
+    s5.addText(a.plan||'',{x:0.5,y:4.8,w:9,h:1.5,fontSize:13,color:BLK,valign:'top',wrap:true});
+  }
+
+  // 저장
+  const fname=`${t.name}_${t.round}차_결과보고서.pptx`;
+  await pptx.writeFile({fileName:fname});
+  toast('📊 PPT 다운로드 완료!');
+}
+
 async function printReport(){
   const doc=document.getElementById('reportA4');
   if(!doc||!RPQ){toast('교육을 먼저 선택해주세요');return;}
