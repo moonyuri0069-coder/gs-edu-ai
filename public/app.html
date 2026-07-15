@@ -2124,6 +2124,41 @@ function isValidOpinion(v){
   if(/^(.){2,}$/.test(v.trim()))return false;
   return true;
 }
+
+// Gemini로 의견 텍스트 정제 (오타/맥락 안 맞는 단어 수정)
+const _opinionCache={};
+async function cleanOpinionsWithAI(opinions){
+  if(!opinions.length)return opinions;
+  const key=opinions.join('|');
+  if(_opinionCache[key])return _opinionCache[key];
+  try{
+    const prompt=`다음은 교육 만족도 설문에서 수집된 참석자 의견입니다.
+각 항목을 아래 규칙에 따라 처리해주세요:
+
+1. 오타나 잘못 입력된 글자는 문맥에 맞게 수정해주세요 (예: "씹어요" → "쉬워요", "조아요" → "좋아요", "이해하기 씹어요" → "이해하기 쉬워요")
+2. 교육 맥락에서 의미를 유추할 수 있으면 최대한 수정해서 살려주세요
+3. 아무리 봐도 의미를 알 수 없는 경우에만 빈 문자열("")로 바꿔주세요
+4. 맞춤법이 맞고 의미가 명확한 항목은 그대로 유지하세요
+
+JSON 배열로만 응답하세요 (설명 없이, 마크다운 없이):
+${JSON.stringify(opinions)}`;
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+    });
+    const data=await res.json();
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const clean=text.replace(/\`\`\`json|\`\`\`/g,'').trim();
+    const result=JSON.parse(clean);
+    if(Array.isArray(result)){
+      const filtered=result.filter(v=>v&&v.trim().length>2);
+      _opinionCache[key]=filtered;
+      return filtered;
+    }
+  }catch(e){console.warn('AI 정제 오류:',e);}
+  return opinions;
+}
 function lectOpinions(L,rsArr){
   const rs2=rsArr||DB.responses;
   const goods=[],imps=[];
@@ -2132,6 +2167,13 @@ function lectOpinions(L,rsArr){
     if(isValidOpinion(v.improve))imps.push(v.improve.trim());});
   const uniq=arr=>[...new Set(arr)].slice(0,4);
   return{goods:uniq(goods),imps:uniq(imps)};
+}
+// AI 정제 포함 버전 (보고서 다운로드 시 사용)
+async function lectOpinionsAI(L,rsArr){
+  const base=lectOpinions(L,rsArr);
+  const goods=await cleanOpinionsWithAI(base.goods);
+  const imps=await cleanOpinionsWithAI(base.imps);
+  return{goods,imps};
 }
 function vReport(){
   if(!RPQ)RPQ=AIQ||DB.trainings.slice(-1)[0]?.id||'';
@@ -2401,11 +2443,23 @@ function removePhoto(tid,idx){
   sbPatch('trainings',tid,{photos:t.photos});
   save();render();toast('사진이 삭제되었습니다');
 }
-function printReport(){
+async function printReport(){
   const doc=document.getElementById('reportA4');
   if(!doc||!RPQ){toast('교육을 먼저 선택해주세요');return;}
   const t=byId(DB.trainings,RPQ);
   if(!t){toast('교육을 먼저 선택해주세요');return;}
+  toast('🤖 AI가 의견을 정제 중...');
+  // AI 오타 수정 캐시 초기화 후 재정제
+  Object.keys(_opinionCache).forEach(k=>delete _opinionCache[k]);
+  const rs=respOf(RPQ);
+  // 모든 강의 의견 미리 정제
+  const lstats2=t.lectures.filter((L,i,arr)=>{
+    if(i===0||i===arr.length-1)return false;
+    return true;
+  });
+  for(const L of lstats2){
+    await lectOpinionsAI(L,rs);
+  }
   // 모든 스타일 수집
   const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
     .flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join('\n');
