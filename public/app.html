@@ -273,7 +273,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .rp-opinion-table th{background:#e8f2ec;color:#0e5a34;font-weight:800;padding:4px 8px;
   border:1px solid #cdd8cb;text-align:center!important}
 .rp-opinion-table td{padding:4px 8px;border:1px solid #e4e7e2;vertical-align:top;line-height:1.4}
-.rp-opinion-table td.lname{font-weight:700;color:#0e5a34;white-space:nowrap;font-size:.72rem;text-align:center}
+.editable-opinion{min-height:1em;}.rp-opinion-table td.lname{font-weight:700;color:#0e5a34;white-space:nowrap;font-size:.72rem;text-align:center}
 .rp-opinion-table ul{margin:0;padding-left:12px}
 .rp-opinion-table li{margin-bottom:2px}
 .rp-opinion-table li.hi{color:#0e5a34;font-weight:700}
@@ -904,13 +904,15 @@ function render(){
       const scaler=document.getElementById('slideScale');
       if(preview&&scaler){
         const pw=preview.offsetWidth;
-        const ratio=pw/1280;
+        const ph=preview.offsetHeight;
+        const ratio=Math.min(pw/1280, ph/720);
         scaler.style.transformOrigin='top left';
         scaler.style.transform='scale('+ratio+')';
         scaler.style.width='1280px';
         scaler.style.height='720px';
         scaler.style.position='absolute';
-        scaler.style.inset='0';
+        scaler.style.top='0';
+        scaler.style.left='0';
       }
       const t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
       if(!t)return;
@@ -2309,16 +2311,16 @@ function vReport(){
           return `<tr>
             <td class="lname">${esc(L.title)}<br>
               <span style="color:#79807a;font-weight:400">(${esc(ins?.field||'')} ${esc(ins?.name||'')})</span></td>
-            <td><ul>${all.length?all.map(x=>`<li class="${x.hi?'hi':''}">${esc(x.t)}</li>`).join('')
+            <td><ul>${all.length?all.map(x=>`<li class="${x.hi?'hi':''}"><span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}">${esc(x.t)}</span></li>`).join('')
               :'<li style="color:#aaa">의견 없음</li>'}</ul></td></tr>`;}).join('')}
         </tbody>
       </table>
       <div style="margin-top:14px"><div class="rp-sec">듣고 싶은 강의 컨텐츠에 대한 의견</div>
         <div class="rp-needs">
           <b>*듣고 싶은 강의 컨텐츠</b><br>
-          ${needs.length?': '+needs.slice(0,6).map(n=>esc(n)).join(', '):': 특이사항 없음'}
+          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}">${needs.length?': '+needs.slice(0,6).map(n=>esc(n)).join(', '):': 특이사항 없음'}</span>
           <br><b>*기타 의견</b><br>
-          ${etcs.length?': '+etcs.slice(0,4).map(e=>esc(e)).join('<br>: '):': 없음'}
+          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}">${etcs.length?': '+etcs.slice(0,4).map(e=>esc(e)).join('<br>: '):': 없음'}</span>
         </div>
       </div>
       <div style="margin-top:12px"><div class="rp-sec">AI 종합 의견</div>
@@ -2489,7 +2491,8 @@ async function printReport(){
     .rp-ai-box{white-space:pre-wrap!important;word-break:break-word!important;overflow:visible!important;max-height:none!important;height:auto!important}
     .rec-bar-fill{display:block!important}
     .no-print{display:none!important}
-    @media print{.no-print{display:none!important}}
+    .no-print-border{border-bottom:none!important;cursor:default!important}
+    @media print{.no-print{display:none!important}.no-print-border{border-bottom:none!important}}
     ${allStyles}
   </style>
   </head><body>
