@@ -2110,7 +2110,6 @@ function vReport(){
       attCols.includes('store')?'': `<td>${esc(a.store||'')}</td>`,
       attCols.includes('name')?'':  `<td style="font-weight:600;text-align:center">${esc(a.name||'')}</td>`,
       attCols.includes('tenure')?'': `<td style="text-align:center;color:#555">${esc(a.tenure||'')}</td>`,
-      attCols.includes('tenure')?'':  `<td style="text-align:center;color:#555">${esc(a.tenure||'')}</td>`,
     ].join('');
     return `<tr>${cells}</tr>`;
   }).join('')
@@ -2371,7 +2370,11 @@ async function printReport(){
   // html2canvas로 PDF 직접 다운로드
   try{
     toast('📄 PDF 생성 중...(잠시 기다려주세요)');
-    const canvas=await html2canvas(doc,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
+    // no-print 요소 임시 숨기기
+  const noPrints=doc.querySelectorAll('.no-print');
+  noPrints.forEach(el=>el.style.display='none');
+  const canvas=await html2canvas(doc,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
+  noPrints.forEach(el=>el.style.display='');
     const imgData=canvas.toDataURL('image/jpeg',0.95);
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
@@ -2843,7 +2846,11 @@ async function printAgenda(){
   if(!t){toast('교육을 먼저 선택해주세요');return;}
   try{
     toast('📄 PDF 생성 중...(잠시 기다려주세요)');
-    const canvas=await html2canvas(doc,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
+    // no-print 요소 임시 숨기기
+  const noPrints=doc.querySelectorAll('.no-print');
+  noPrints.forEach(el=>el.style.display='none');
+  const canvas=await html2canvas(doc,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
+  noPrints.forEach(el=>el.style.display='');
     const imgData=canvas.toDataURL('image/jpeg',0.95);
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
