@@ -2086,7 +2086,7 @@ function vAI(){
   return sel+`
   <div class="card card-pad ai-card">
    <div class="ai-eyebrow">✦ AI SUMMARY · ${esc(t.name)} ${t.round}차</div>
-   <div class="ai-headline">${esc(a.summary.split('.')[0])}.</div>
+   <div class="ai-headline">${esc((a?.summary||'').split('.')[0])}.</div>
    <div style="font-size:.9rem;color:var(--ink2);line-height:1.7">${esc(a.summary)}</div>
    <div class="divider"></div>
    <div class="row" style="gap:22px;flex-wrap:wrap">
@@ -2702,7 +2702,7 @@ function openSlideFullscreen(){
 }
 
 function renderSlide(idx,t,attendUrl,surveyUrl){
-  const BG="background:url('/제목을 입력하세요 (7).jpg') center center/cover no-repeat";
+  const BG="background:url('/%EC%A0%9C%EB%AA%A9%EC%9D%84%20%EC%9E%85%EB%A0%A5%ED%95%98%EC%84%B8%EC%9A%94%20(7).jpg') center center/cover no-repeat";
   // 칠판 영역: left 20%, top 9%, width 60%, height 79%
   const BOARD="position:absolute;left:20%;top:9%;width:60%;height:79%;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:16px;box-sizing:border-box";
 
