@@ -2635,10 +2635,11 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
 
   // ── 슬라이드 1: 교육 일정 안내 ──
   if(idx===1){
-    const lectures=t.lectures||[];
+    const lectures=t.lectures||[]; // 교육일정안내는 전체 강의 표시
     return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
       <div style="position:absolute;left:20%;top:9%;width:60%;height:79%;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:2% 2.5%;box-sizing:border-box;overflow:hidden">
         <div style="font-size:clamp(1.4rem,2.8vw,3.5rem);font-weight:900;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.6);text-align:center;width:100%">교육 일정 안내</div>
+        <div style="font-size:clamp(.8rem,1.5vw,1.2rem);font-weight:700;color:#ffd700;text-align:center;width:100%;margin-top:4px">${esc(t.name)} ${t.round}차</div>
         <div style="width:92%;flex:1;display:flex;align-items:center;overflow:hidden;margin:1% 0">
         <div style="width:100%;overflow:hidden">
         <table style="width:100%;border-collapse:collapse;font-size:clamp(.55rem,1.1vw,.82rem)">
@@ -2711,7 +2712,8 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
 let AQ=''; // 선택된 교육 ID
 function vAgenda(){
   const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
-  if(AQ&&!byId(DB.trainings,AQ))AQ='';
+  if(!AQ&&list.length)AQ=list[0].id;
+  if(AQ&&!byId(DB.trainings,AQ)&&list.length)AQ=list[0].id;
   const t=AQ?byId(DB.trainings,AQ):null;
   const sel=`<div class="card card-pad" style="margin-bottom:14px">
     <div class="spread" style="flex-wrap:wrap;gap:10px">
@@ -2728,7 +2730,7 @@ function vAgenda(){
       </div>
     </div>
   </div>`;
-  if(!t||!AQ)return sel+'<div class="empty" style="padding-top:60px;font-size:1.1rem">⬆ 교육을 선택하고 조회하세요</div>';
+  if(!t)return sel+'<div class="empty">교육을 선택해주세요</div>';
   return sel+renderAgendaDoc(t);
 }
 
