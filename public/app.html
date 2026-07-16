@@ -2513,10 +2513,7 @@ function vGuide(){
           <button class="btn sm" onclick="nav('#/s/${GUIDE_SEL}')">설문 미리보기</button>
         `:''}
         ${GUIDE_SLIDE===4?`
-          <label class="btn sm" style="cursor:pointer">
-            🖼️ 이미지 업로드
-            <input type="file" accept="image/*" style="display:none" onchange="uploadConnectingImg('${GUIDE_SEL}',this)">
-          </label>
+          <button class="btn sm" onclick="pasteConnectingImg('${GUIDE_SEL}')">📋 이미지 붙여넣기</button>
           ${t&&t.connectingDayImg?`<button class="btn sm ghost" onclick="removeConnectingImg('${GUIDE_SEL}')">🗑 이미지 삭제</button>`:''}
         `:''}
 
@@ -2542,21 +2539,31 @@ function vGuide(){
   </div>`:''}`;
 }
 
-function uploadConnectingImg(tid, input){
-  const file=input.files[0];
-  if(!file)return;
-  if(file.size>5*1024*1024){toast('이미지는 5MB 이하로 올려주세요');return;}
-  const reader=new FileReader();
-  reader.onload=e=>{
-    const t=byId(DB.trainings,tid);
-    if(!t)return;
-    t.connectingDayImg=e.target.result;
-    save();
-    sbPatch('trainings',tid,{subtitle:t.subtitle||''});
-    render();
-    toast('✅ 이미지 업로드 완료!');
-  };
-  reader.readAsDataURL(file);
+async function pasteConnectingImg(tid){
+  try{
+    const items=await navigator.clipboard.read();
+    for(const item of items){
+      const imgType=item.types.find(t=>t.startsWith('image/'));
+      if(imgType){
+        const blob=await item.getType(imgType);
+        const reader=new FileReader();
+        reader.onload=e=>{
+          const t=byId(DB.trainings,tid);
+          if(!t)return;
+          t.connectingDayImg=e.target.result;
+          save();
+          render();
+          toast('✅ 이미지 붙여넣기 완료!');
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
+    }
+    toast('⚠️ 클립보드에 이미지가 없어요. 이미지를 먼저 복사해주세요!');
+  }catch(e){
+    toast('⚠️ 클립보드 접근 실패. 브라우저 권한을 확인해주세요.');
+    console.error(e);
+  }
 }
 function removeConnectingImg(tid){
   const t=byId(DB.trainings,tid);
