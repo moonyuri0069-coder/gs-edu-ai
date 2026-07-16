@@ -1330,6 +1330,8 @@ function toggleAttCol(tid, col){
   if(idx>=0)t.attHideCols.splice(idx,1);
   else t.attHideCols.push(col);
   save();
+  // attHideCols를 attendees와 함께 Supabase에 저장
+  sbPatch('trainings',tid,{attendees:t.attendees||[]});
   render();
 }
 function renderAttRows(){
@@ -2546,14 +2548,29 @@ async function pasteConnectingImg(tid){
       const imgType=item.types.find(t=>t.startsWith('image/'));
       if(imgType){
         const blob=await item.getType(imgType);
+        // 크기 확인
+        if(blob.size>3*1024*1024){toast('⚠️ 이미지가 너무 커요! 3MB 이하 이미지를 사용해주세요.');return;}
         const reader=new FileReader();
-        reader.onload=e=>{
+        reader.onload=async e=>{
           const t=byId(DB.trainings,tid);
           if(!t)return;
-          t.connectingDayImg=e.target.result;
-          save();
-          render();
-          toast('✅ 이미지 붙여넣기 완료!');
+          // 이미지 압축 (최대 1200px)
+          const img=new Image();
+          img.onload=()=>{
+            const MAX=1200;
+            let w=img.width,h=img.height;
+            if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
+            const canvas=document.createElement('canvas');
+            canvas.width=w;canvas.height=h;
+            canvas.getContext('2d').drawImage(img,0,0,w,h);
+            const compressed=canvas.toDataURL('image/jpeg',0.85);
+            t.connectingDayImg=compressed;
+            save();
+            sbPatch('trainings',tid,{checkins:t.checkins||[]});
+            render();
+            toast('✅ 이미지 붙여넣기 완료!');
+          };
+          img.src=e.target.result;
         };
         reader.readAsDataURL(blob);
         return;
@@ -2570,6 +2587,7 @@ function removeConnectingImg(tid){
   if(!t)return;
   delete t.connectingDayImg;
   save();
+  sbPatch('trainings',tid,{checkins:t.checkins||[]});
   render();
   toast('이미지가 삭제됐어요');
 }
