@@ -2652,10 +2652,10 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
           <tbody>${lectures.map((L,i)=>{
             const ins=byId(DB.instructors,L.instructorId);
             return `<tr style="background:${i%2===0?'rgba(255,255,255,.1)':'rgba(255,255,255,.06)'};border-bottom:1px solid rgba(255,255,255,.1)">
-              <td style="padding:5px 6px;text-align:center;color:#fff;font-weight:700;font-size:clamp(.85rem,1.35vw,1.35rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(L.slot||'-')}</td>
-              <td style="padding:5px 6px;font-weight:700;color:#fff;text-align:center;font-size:clamp(.85rem,1.35vw,1.35rem);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(L.title)}</td>
-              <td style="padding:5px 6px;text-align:center;color:#fff;font-weight:700;font-size:clamp(.85rem,1.35vw,1.35rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(L.field||ins?.field||'-')}</td>
-              <td style="padding:5px 6px;text-align:center;color:#fff;font-weight:700;font-size:clamp(.85rem,1.35vw,1.35rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.6)">${esc(L.instructorName||ins?.name||'-')}</td>
+              <td style="padding:6px 6px;text-align:center;color:#fff;font-weight:700;font-size:clamp(.85rem,1.35vw,1.35rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(L.slot||'-')}</td>
+              <td style="padding:6px 6px;font-weight:700;color:#fff;text-align:center;font-size:clamp(.85rem,1.35vw,1.35rem);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(L.title)}</td>
+              <td style="padding:6px 6px;text-align:center;color:#fff;font-weight:700;font-size:clamp(.85rem,1.35vw,1.35rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(L.field||ins?.field||'-')}</td>
+              <td style="padding:6px 6px;text-align:center;color:#fff;font-weight:700;font-size:clamp(.85rem,1.35vw,1.35rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.6)">${esc(L.instructorName||ins?.name||'-')}</td>
             </tr>`;
           }).join('')}</tbody>
         </table>
