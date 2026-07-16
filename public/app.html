@@ -2466,8 +2466,8 @@ function vGuide(){
   const attendUrl=`${location.origin||''}${location.pathname}#/attend/${GUIDE_SEL}`;
   const surveyUrl=`${location.origin||''}${location.pathname}#/s/${GUIDE_SEL}`;
 
-  const slides=['출석 등록 QR','교육 일정 안내','교육 에티켓','만족도 조사 QR'];
-  const slideDesc=['교육 시작 시 출석 등록','강의 일정 안내','교육 진행 에티켓','교육 종료 후 만족도 조사'];
+  const slides=['출석 등록 QR','교육 일정 안내','교육 에티켓','만족도 조사 QR','커넥팅데이 장소안내'];
+  const slideDesc=['교육 시작 시 출석 등록','강의 일정 안내','교육 진행 에티켓','교육 종료 후 만족도 조사','커넥팅데이 장소 이미지'];
 
   return `
   <!-- 배경 이미지 + 중앙 콘텐츠 -->
@@ -2512,6 +2512,13 @@ function vGuide(){
           <div style="font-size:.8rem;color:var(--ink3)">응답 <b style="color:var(--green)">${respOf(GUIDE_SEL).length}건</b></div>
           <button class="btn sm" onclick="nav('#/s/${GUIDE_SEL}')">설문 미리보기</button>
         `:''}
+        ${GUIDE_SLIDE===4?`
+          <label class="btn sm" style="cursor:pointer">
+            🖼️ 이미지 업로드
+            <input type="file" accept="image/*" style="display:none" onchange="uploadConnectingImg('${GUIDE_SEL}',this)">
+          </label>
+          ${t&&t.connectingDayImg?`<button class="btn sm ghost" onclick="removeConnectingImg('${GUIDE_SEL}')">🗑 이미지 삭제</button>`:''}
+        `:''}
 
       </div>
     </div>
@@ -2535,6 +2542,30 @@ function vGuide(){
   </div>`:''}`;
 }
 
+function uploadConnectingImg(tid, input){
+  const file=input.files[0];
+  if(!file)return;
+  if(file.size>5*1024*1024){toast('이미지는 5MB 이하로 올려주세요');return;}
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const t=byId(DB.trainings,tid);
+    if(!t)return;
+    t.connectingDayImg=e.target.result;
+    save();
+    sbPatch('trainings',tid,{subtitle:t.subtitle||''});
+    render();
+    toast('✅ 이미지 업로드 완료!');
+  };
+  reader.readAsDataURL(file);
+}
+function removeConnectingImg(tid){
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  delete t.connectingDayImg;
+  save();
+  render();
+  toast('이미지가 삭제됐어요');
+}
 function openSlideFullscreen(){
   const t=GUIDE_SEL?byId(DB.trainings,GUIDE_SEL):null;
   if(!t){toast('교육을 먼저 선택해주세요');return;}
@@ -2545,6 +2576,7 @@ function openSlideFullscreen(){
   const s1=renderSlide(1,t,attendUrl,surveyUrl);
   const s2=renderSlide(2,t,attendUrl,surveyUrl);
   const s3=renderSlide(3,t,attendUrl,surveyUrl).replace('id="qrSurvey"','id="qrS2"');
+  const s4=renderSlide(4,t,attendUrl,surveyUrl);
   const aUrl=JSON.stringify(attendUrl);
   const sUrl=JSON.stringify(surveyUrl);
   const w=window.open('','_blank','width=1280,height=720');
@@ -2562,6 +2594,7 @@ function openSlideFullscreen(){
   <div class="sp" id="p1">${s1}</div>
   <div class="sp" id="p2">${s2}</div>
   <div class="sp" id="p3">${s3}</div>
+  <div class="sp" id="p4">${s4}</div>
   <div id="nb">
     <button onclick="go(-1)">◀ 이전</button>
     <span id="nn">1 / 4</span>
@@ -2572,9 +2605,9 @@ function openSlideFullscreen(){
   var idx=0,pages=document.querySelectorAll('.sp');
   function go(d){
     pages[idx].classList.remove('on');
-    idx=Math.max(0,Math.min(3,idx+d));
+    idx=Math.max(0,Math.min(4,idx+d));
     pages[idx].classList.add('on');
-    document.getElementById('nn').textContent=(idx+1)+' / 4';
+    document.getElementById('nn').textContent=(idx+1)+' / 5';
     qr();
   }
   function qr(){
@@ -2686,7 +2719,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
   }
 
   // ── 슬라이드 3: 만족도 조사 QR ──
-  return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
+  if(idx!==4) return `<div style="width:100%;height:100%;${BG};position:relative;overflow:hidden">
     <div style="position:absolute;left:20%;top:9%;width:60%;height:79%;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;padding:3% 5%;box-sizing:border-box">
       <div style="font-size:clamp(2rem,3.5vw,4.5rem);font-weight:900;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.6);text-align:center">교육 만족도 조사</div>
       <div style="font-size:clamp(1rem,1.8vw,2.2rem);font-weight:700;color:#fff;text-align:center;line-height:1.7;text-shadow:0 1px 4px rgba(0,0,0,.5)">
@@ -2698,6 +2731,19 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
       </div>
       <div style="font-size:clamp(1rem,1.8vw,2rem);color:#ffd700;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.6)">${esc(t.name)} ${t.round}차 만족도 설문</div>
     </div>
+  </div>`;
+
+  // ── 슬라이드 4: 커넥팅데이 장소안내 ──
+  const connectImg=t.connectingDayImg||'';
+  return `<div style="width:100%;height:100%;background:#111;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">
+    ${connectImg
+      ? `<img src="${connectImg}" style="max-width:100%;max-height:100%;object-fit:contain">`
+      : `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff">
+          <div style="font-size:2rem">🖼️</div>
+          <div style="font-size:1.4rem;font-weight:700">커넥팅데이 장소안내</div>
+          <div style="font-size:1rem;color:#aaa">교육생안내 메뉴에서 이미지를 업로드해주세요</div>
+        </div>`
+    }
   </div>`;
 }
 
