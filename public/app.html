@@ -2168,6 +2168,12 @@ function vReport(){
       </div>
     </div>
 
+    <div class="rp-kpi-row">
+    ${[['평균 만족도',f1(totalV)+' / 5.0'],['전문성·전달력',f1(ex)+' / 5.0'],['실무 적용성',f1(pr)+' / 5.0'],['응답 인원',rs.length+'명'],['응답률',pct(rate)]]
+      .map(([l,v])=>`<div class="rp-kpi-badge"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`).join('')}
+  </div>
+  <hr class="rp-page-break">
+  <!-- ═══ 2페이지 ═══ -->
   <div class="rp-section-box" style="margin-bottom:8px">
     <div class="rp-section-head">교육 사진</div>
     <div class="rp-section-body">
@@ -2195,12 +2201,6 @@ function vReport(){
       ${session?'<div class="no-print" style="font-size:.65rem;color:#888;margin-top:4px">📷 클릭하여 사진 추가 (JPG/PNG)</div>':''}
     </div>
   </div>
-  <div class="rp-kpi-row">
-    ${[['평균 만족도',f1(totalV)+' / 5.0'],['전문성·전달력',f1(ex)+' / 5.0'],['실무 적용성',f1(pr)+' / 5.0'],['응답 인원',rs.length+'명'],['응답률',pct(rate)]]
-      .map(([l,v])=>`<div class="rp-kpi-badge"><div class="k-val">${v}</div><div class="k-lbl">${l}</div></div>`).join('')}
-  </div>
-  <hr class="rp-page-break">
-  <!-- ═══ 2페이지 ═══ -->
   <div class="rp-two">
     <div>
       <div class="rp-sec">강의별 주요 의견</div>
@@ -2410,6 +2410,7 @@ async function printReport(){
     .dl-bar{background:#0e5a34;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:16px}
     .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:700}
     .no-print{display:none!important}.no-print-border{border-bottom:none!important}
+    .editable-opinion{border-bottom:none!important}
     [contenteditable]{border:none!important;outline:none!important;cursor:default!important}
     @media print{.dl-bar{display:none}}.report-wrap{max-width:800px;margin:0 auto}
     ${allStyles}</style></head><body>
