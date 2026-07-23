@@ -3022,9 +3022,6 @@ function vFeedback(){
   });
 
   // 전체 평균
-  const expertAvg=avg(lectData.filter(d=>d.s.n>0).map(d=>d.s.expert));
-  const practicalAvg=avg(lectData.filter(d=>d.s.n>0).map(d=>d.s.practical));
-
   // 그래프 바
   function bar(val,max=5,color='#0e5a34'){
     const pct=Math.round((val/max)*100);
@@ -3092,22 +3089,16 @@ function vFeedback(){
             <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">${esc(L.title)}</div>
             ${bar(s.expert,5,'#0e5a34')}
           </div>`:``).join('')}
-        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
-          <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">전체 평균</div>
-          ${bar(expertAvg,5,'#1976d2')}
-        </div>
+
       </div>
       <div style="background:var(--surface2);border-radius:10px;padding:14px">
         <div style="font-weight:800;font-size:.85rem;margin-bottom:10px">💡 실무 적용 가능성</div>
         ${lectData.map(({L,s})=>s.n>0?`
           <div style="margin-bottom:8px">
             <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">${esc(L.title)}</div>
-            ${bar(s.practical,5,'#7b1fa2')}
+            ${bar(s.practical,5,'#0e5a34')}
           </div>`:``).join('')}
-        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
-          <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">전체 평균</div>
-          ${bar(practicalAvg,5,'#e65100')}
-        </div>
+
       </div>
     </div>
 
