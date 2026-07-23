@@ -2959,118 +2959,231 @@ async function printAgenda(){
 /* ═══════════ 설정 ═══════════ */
 function vFeedback(){
   if(!session)return '<div class="card card-pad"><div class="empty">로그인 후 이용할 수 있습니다</div></div>';
-  const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
-  if(!FBQ&&list.length)FBQ=list[0].id;
-  if(FBQ&&!byId(DB.trainings,FBQ)&&list.length)FBQ=list[0].id;
+  const tlist=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
+  if(!FBQ&&tlist.length)FBQ=tlist[0].id;
   const t=FBQ?byId(DB.trainings,FBQ):null;
 
+  // 강사 목록 (해당 교육 강의에서 추출, 제외 강의 빼고)
+  const fbLects=t?t.lectures.filter((L,i,arr)=>{
+    if(i===0||i===arr.length-1)return false;
+    if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
+    return true;
+  }):[];
+  // 강사 중복 제거
+  const seen=new Set();
+  const instrList=fbLects.filter(L=>{
+    const k=L.instructorId||L.instructorName||L.title;
+    if(seen.has(k))return false;
+    seen.add(k); return true;
+  }).map(L=>{
+    const ins=byId(DB.instructors,L.instructorId);
+    return {id:L.instructorId||L.id, name:L.instructorName||ins?.name||L.title, lectId:L.id};
+  });
+
+  if(!window._FBINSTR&&instrList.length)window._FBINSTR=instrList[0].id;
+  const selInstr=window._FBINSTR;
+
   const sel=`<div class="card card-pad" style="margin-bottom:14px">
-    <div class="spread" style="flex-wrap:wrap;gap:10px">
+    <div class="spread" style="flex-wrap:wrap;gap:10px;align-items:flex-end">
       <div>
         <div style="font-weight:800;margin-bottom:6px">교육 선택</div>
-        <select class="select" style="min-width:280px" onchange="FBQ=this.value;render()" id="fbqSelect">
+        <select class="select" style="min-width:240px" onchange="FBQ=this.value;window._FBINSTR='';render()">
           <option value="">-- 교육을 선택하세요 --</option>
-          ${list.map(tr=>`<option value="${tr.id}" ${FBQ===tr.id?'selected':''}>${esc(tr.name)} ${tr.round}차 (${tr.date})</option>`).join('')}
+          ${tlist.map(tr=>`<option value="${tr.id}" ${FBQ===tr.id?'selected':''}>${esc(tr.name)} ${tr.round}차 (${tr.date})</option>`).join('')}
         </select>
       </div>
+      ${t&&instrList.length?`<div>
+        <div style="font-weight:800;margin-bottom:6px">강사 선택</div>
+        <select class="select" style="min-width:180px" onchange="window._FBINSTR=this.value;render()">
+          ${instrList.map(ins=>`<option value="${ins.id}" ${selInstr===ins.id?'selected':''}>${esc(ins.name)}</option>`).join('')}
+        </select>
+      </div>`:''}
     </div>
   </div>`;
 
   if(!t)return sel+'<div class="empty">교육을 선택해주세요</div>';
+  if(!instrList.length)return sel+'<div class="empty">피드백 대상 강사가 없습니다</div>';
 
-  // 피드백 대상 강의 목록 (첫/마지막, 점심식사, 가치공유 제외)
-  const fbLects=t.lectures.filter((L,i,arr)=>{
-    if(i===0||i===arr.length-1)return false;
-    if(L.title&&L.title.includes('점심식사'))return false;
-    if(L.title&&L.title.includes('가치공유'))return false;
-    return true;
+  // 선택된 강사의 강의들
+  const myLects=fbLects.filter(L=>{
+    const k=L.instructorId||L.id;
+    return k===selInstr||(L.instructorName&&instrList.find(i=>i.id===selInstr)?.name===L.instructorName);
+  });
+  if(!myLects.length)return sel+'<div class="empty">해당 강사의 강의가 없습니다</div>';
+
+  const rs=respOf(FBQ);
+  const instrName=instrList.find(i=>i.id===selInstr)?.name||'';
+
+  // 강의별 통계 + 의견
+  const lectData=myLects.map(L=>{
+    const s=lectureAvg(FBQ,L.id);
+    const{goods,imps}=lectOpinions(L,rs);
+    return{L,s,goods,imps};
   });
 
-  // 피드백 데이터 (t.feedback = {강의id: {score, comment}})
-  if(!t.feedback)t.feedback={};
+  // 전체 평균
+  const expertAvg=avg(lectData.filter(d=>d.s.n>0).map(d=>d.s.expert));
+  const practicalAvg=avg(lectData.filter(d=>d.s.n>0).map(d=>d.s.practical));
 
-  const rows=fbLects.map(L=>{
-    const ins=byId(DB.instructors,L.instructorId);
-    const fb=t.feedback[L.id]||{score:0,comment:''};
-    const stars=[1,2,3,4,5].map(n=>`
-      <span onclick="setFBScore('${t.id}','${L.id}',${n})"
-        style="cursor:pointer;font-size:1.4rem;color:${n<=(fb.score||0)?'#f5a623':'#ddd'};transition:color .15s">★</span>`).join('');
-    return `<tr>
-      <td style="padding:10px 8px;font-weight:700;font-size:.82rem;min-width:100px">${esc(L.title)}</td>
-      <td style="padding:10px 8px;font-size:.8rem;color:#555">${esc(ins?.name||L.instructorName||'-')}</td>
-      <td style="padding:10px 8px;white-space:nowrap">${stars}
-        <span style="font-size:.8rem;color:#666;margin-left:4px">${fb.score?fb.score+'.0':'미평가'}</span>
+  // 그래프 바
+  function bar(val,max=5,color='#0e5a34'){
+    const pct=Math.round((val/max)*100);
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;height:14px;background:#e4e7e2;border-radius:7px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:7px;transition:width .4s"></div>
+      </div>
+      <span style="font-size:.82rem;font-weight:700;color:${color};min-width:32px">${f1(val)}</span>
+    </div>`;
+  }
+
+  // 피드백 데이터 (수정 가능한 주관식)
+  if(!t.feedback)t.feedback={};
+  if(!t.feedback[selInstr])t.feedback[selInstr]={goods:[],imps:[]};
+  const fb=t.feedback[selInstr];
+  // 초기 로드 시 설문 의견으로 초기화
+  if(!fb._loaded){
+    const allGoods=[...new Set(lectData.flatMap(d=>d.goods))];
+    const allImps=[...new Set(lectData.flatMap(d=>d.imps))];
+    if(!fb.goods.length)fb.goods=[...allGoods];
+    if(!fb.imps.length)fb.imps=[...allImps];
+    fb._loaded=true;
+    save();
+  }
+
+  const goodRows=fb.goods.map((g,gi)=>`
+    <tr>
+      <td style="padding:6px 8px;vertical-align:top">
+        <span contenteditable="true" style="outline:none;border-bottom:1px dashed #aaa;display:inline-block;min-width:80px"
+          onblur="editFBOpinion('${FBQ}','${selInstr}','goods',${gi},this.innerText)">${esc(g)}</span>
       </td>
-      <td style="padding:10px 8px;min-width:200px">
-        <textarea class="input" rows="2"
-          style="width:100%;font-size:.78rem;resize:vertical;min-height:48px"
-          placeholder="강사 피드백을 입력하세요..."
-          onblur="setFBComment('${t.id}','${L.id}',this.value)">${esc(fb.comment||'')}</textarea>
+      <td style="padding:6px 8px;text-align:center;vertical-align:top">
+        <button onclick="delFBOpinion('${FBQ}','${selInstr}','goods',${gi})"
+          style="background:none;border:none;cursor:pointer;color:#aaa;font-size:.8rem">✕</button>
       </td>
-    </tr>`;
-  }).join('');
+    </tr>`).join('');
+
+  const impRows=fb.imps.map((g,gi)=>`
+    <tr>
+      <td style="padding:6px 8px;vertical-align:top">
+        <span contenteditable="true" style="outline:none;border-bottom:1px dashed #aaa;display:inline-block;min-width:80px"
+          onblur="editFBOpinion('${FBQ}','${selInstr}','imps',${gi},this.innerText)">${esc(g)}</span>
+      </td>
+      <td style="padding:6px 8px;text-align:center;vertical-align:top">
+        <button onclick="delFBOpinion('${FBQ}','${selInstr}','imps',${gi})"
+          style="background:none;border:none;cursor:pointer;color:#aaa;font-size:.8rem">✕</button>
+      </td>
+    </tr>`).join('');
 
   return sel+`
   <div class="card card-pad">
-    <div class="card-title" style="margin-bottom:14px">📝 ${esc(t.name)} ${t.round}차 강사 피드백</div>
-    <div style="font-size:.8rem;color:var(--ink3);margin-bottom:12px">
-      ${t.date} · ${t.place||''} · 강의 ${fbLects.length}개
+    <div style="font-size:1.05rem;font-weight:900;color:var(--green);margin-bottom:4px">
+      ${esc(instrName)} 강사 피드백
     </div>
-    ${fbLects.length?`
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse">
-      <thead><tr style="border-bottom:2px solid var(--border)">
-        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">강의명</th>
-        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">강사</th>
-        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">별점</th>
-        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">피드백 코멘트</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div style="font-size:.8rem;color:var(--ink3);margin-bottom:16px">
+      ${esc(t.name)} ${t.round}차 · ${rs.length}명 응답
     </div>
-    <div style="margin-top:14px;display:flex;gap:8px">
-      <button class="btn primary" onclick="saveFeedback('${t.id}')">💾 피드백 저장</button>
-      <button class="btn ghost" onclick="clearFeedback('${t.id}')">🗑 전체 초기화</button>
-    </div>`
-    :'<div class="empty">피드백 대상 강의가 없습니다</div>'}
+
+    <!-- 그래프 -->
+    <div class="g2" style="gap:14px;margin-bottom:20px">
+      <div style="background:var(--surface2);border-radius:10px;padding:14px">
+        <div style="font-weight:800;font-size:.85rem;margin-bottom:10px">⭐ 전문성 및 전달력</div>
+        ${lectData.map(({L,s})=>s.n>0?`
+          <div style="margin-bottom:8px">
+            <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">${esc(L.title)}</div>
+            ${bar(s.expert,5,'#0e5a34')}
+          </div>`:``).join('')}
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+          <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">전체 평균</div>
+          ${bar(expertAvg,5,'#1976d2')}
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:10px;padding:14px">
+        <div style="font-weight:800;font-size:.85rem;margin-bottom:10px">💡 실무 적용 가능성</div>
+        ${lectData.map(({L,s})=>s.n>0?`
+          <div style="margin-bottom:8px">
+            <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">${esc(L.title)}</div>
+            ${bar(s.practical,5,'#7b1fa2')}
+          </div>`:``).join('')}
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+          <div style="font-size:.75rem;color:var(--ink3);margin-bottom:3px">전체 평균</div>
+          ${bar(practicalAvg,5,'#e65100')}
+        </div>
+      </div>
+    </div>
+
+    <!-- 의견 표 -->
+    <div class="g2" style="gap:14px">
+      <div>
+        <div style="font-weight:800;font-size:.85rem;margin-bottom:8px;color:#0e5a34">👍 좋았던 점</div>
+        <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+          <thead><tr style="border-bottom:2px solid #0e5a34">
+            <th style="padding:6px 8px;text-align:left;color:#0e5a34">의견</th>
+            <th style="width:30px"></th>
+          </tr></thead>
+          <tbody>${goodRows||'<tr><td style="padding:8px;color:#aaa">의견 없음</td></tr>'}</tbody>
+        </table>
+        <button onclick="addFBOpinion('${FBQ}','${selInstr}','goods')"
+          style="margin-top:8px;background:none;border:1px dashed #0e5a34;color:#0e5a34;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:.78rem">+ 의견 추가</button>
+      </div>
+      <div>
+        <div style="font-weight:800;font-size:.85rem;margin-bottom:8px;color:#c62828">👎 아쉬운 점</div>
+        <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+          <thead><tr style="border-bottom:2px solid #c62828">
+            <th style="padding:6px 8px;text-align:left;color:#c62828">의견</th>
+            <th style="width:30px"></th>
+          </tr></thead>
+          <tbody>${impRows||'<tr><td style="padding:8px;color:#aaa">의견 없음</td></tr>'}</tbody>
+        </table>
+        <button onclick="addFBOpinion('${FBQ}','${selInstr}','imps')"
+          style="margin-top:8px;background:none;border:1px dashed #c62828;color:#c62828;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:.78rem">+ 의견 추가</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn primary" onclick="saveFeedback('${FBQ}','${selInstr}')">💾 저장</button>
+      <button class="btn ghost" onclick="resetFBOpinions('${FBQ}','${selInstr}')">🔄 설문 의견으로 초기화</button>
+    </div>
   </div>`;
 }
 
-function setFBScore(tid,lid,score){
+function editFBOpinion(tid,instr,type,idx,val){
   const t=byId(DB.trainings,tid);
-  if(!t)return;
-  if(!t.feedback)t.feedback={};
-  if(!t.feedback[lid])t.feedback[lid]={score:0,comment:''};
-  t.feedback[lid].score=score;
-  save();
-  render();
-}
-
-function setFBComment(tid,lid,comment){
-  const t=byId(DB.trainings,tid);
-  if(!t)return;
-  if(!t.feedback)t.feedback={};
-  if(!t.feedback[lid])t.feedback[lid]={score:0,comment:''};
-  t.feedback[lid].comment=comment.trim();
+  if(!t||!t.feedback?.[instr])return;
+  t.feedback[instr][type][idx]=val.trim();
   save();
 }
 
-function saveFeedback(tid){
+function delFBOpinion(tid,instr,type,idx){
+  const t=byId(DB.trainings,tid);
+  if(!t||!t.feedback?.[instr])return;
+  t.feedback[instr][type].splice(idx,1);
+  save(); render();
+}
+
+function addFBOpinion(tid,instr,type){
   const t=byId(DB.trainings,tid);
   if(!t)return;
+  if(!t.feedback)t.feedback={};
+  if(!t.feedback[instr])t.feedback[instr]={goods:[],imps:[]};
+  t.feedback[instr][type].push('새 의견');
+  save(); render();
+}
+
+function saveFeedback(tid,instr){
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  save();
   sbPatch('trainings',tid,{attendees:t.attendees||[]});
-  save();
   toast('✅ 피드백이 저장됐어요!');
 }
 
-function clearFeedback(tid){
-  if(!confirm('이 교육의 피드백을 모두 초기화할까요?'))return;
+function resetFBOpinions(tid,instr){
+  if(!confirm('설문 의견으로 초기화할까요?'))return;
   const t=byId(DB.trainings,tid);
   if(!t)return;
-  t.feedback={};
-  save();
-  render();
-  toast('피드백이 초기화됐어요');
+  if(!t.feedback)t.feedback={};
+  if(t.feedback[instr])t.feedback[instr]._loaded=false;
+  save(); render();
 }
 
 function vSettings(){
