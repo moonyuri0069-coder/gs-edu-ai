@@ -647,6 +647,7 @@ const MENUS=[['dash','Dashboard','M3 13h6V3H3v10zm0 8h6v-6H3v6zm8 0h10V11H11v10z
  ['agenda','교육진행안','M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'],
  ['report','결과보고서','M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 7V3.5L18.5 9H13z'],
  ['guide','교육생안내','M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM5 10h9v2H5zm0-3h9v2H5zm0 6h6v2H5zm11 1l-1.4-1.4L16 11.2l-1.4-1.4L13 11.4 11.6 10 10 11.6l3 3 5-5z'],
+ ['feedback','강사피드백','M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12l-3-3-3 3V4h6v10z'],
  ['settings','설정','M19.4 13a7.7 7.7 0 000-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 00-1.7-1l-.4-2.6h-4l-.4 2.6a7.7 7.7 0 00-1.7 1l-2.4-1-2 3.4L6.6 11a7.7 7.7 0 000 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 001.7 1l.4 2.6h4l.4-2.6a7.7 7.7 0 001.7-1l2.4 1 2-3.4-2.2-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z']];
 const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간'],trainings:['교육관리','교육·강의 구성 · QR/설문 URL · 응답 마감'],
  instructors:['강사관리','강사 등록 · 강사별 Dashboard'],surveys:['설문관리','설문 구성 미리보기'],
@@ -654,6 +655,7 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  agenda:['교육진행안','집합교육 진행안(案) 자동 생성 · PDF'],
  report:['결과보고서','임원보고 A4 자동 생성 · PDF'],
  guide:['교육생안내','출석QR · 일정안내 · 만족도QR — 16:9 교육용 화면'],
+ feedback:['강사피드백','교육 차수별 강사 피드백 작성'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
 // 세션 복구 시 1번만 Supabase 동기화
@@ -734,7 +736,7 @@ function render(){
   const parts=h.replace('#/','').split('/');
   const page=parts[0]||'dash';
   const body={dash:vDash,trainings:vTrainings,instructors:parts[1]?()=>vInstructorDetail(parts[1]):vInstructors,
-    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,settings:vSettings}[page]||vDash;
+    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,settings:vSettings}[page]||vDash;
   const [title,sub]=PAGE_META[page]||PAGE_META.dash;
   $('#app').innerHTML=`
   <div class="layout">
@@ -2774,7 +2776,8 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
 
 
 /* ═══════════ 교육진행안 ═══════════ */
-let AQ=''; // 선택된 교육 ID
+let AQ='';
+let FBQ=''; // 선택된 교육 ID
 function vAgenda(){
   const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
   if(!AQ&&list.length)AQ=list[0].id;
@@ -2954,6 +2957,122 @@ async function printAgenda(){
 }
 
 /* ═══════════ 설정 ═══════════ */
+function vFeedback(){
+  if(!session)return '<div class="card card-pad"><div class="empty">로그인 후 이용할 수 있습니다</div></div>';
+  const list=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
+  if(!FBQ&&list.length)FBQ=list[0].id;
+  if(FBQ&&!byId(DB.trainings,FBQ)&&list.length)FBQ=list[0].id;
+  const t=FBQ?byId(DB.trainings,FBQ):null;
+
+  const sel=`<div class="card card-pad" style="margin-bottom:14px">
+    <div class="spread" style="flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-weight:800;margin-bottom:6px">교육 선택</div>
+        <select class="select" style="min-width:280px" onchange="FBQ=this.value;render()" id="fbqSelect">
+          <option value="">-- 교육을 선택하세요 --</option>
+          ${list.map(tr=>`<option value="${tr.id}" ${FBQ===tr.id?'selected':''}>${esc(tr.name)} ${tr.round}차 (${tr.date})</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  </div>`;
+
+  if(!t)return sel+'<div class="empty">교육을 선택해주세요</div>';
+
+  // 피드백 대상 강의 목록 (첫/마지막, 점심식사, 가치공유 제외)
+  const fbLects=t.lectures.filter((L,i,arr)=>{
+    if(i===0||i===arr.length-1)return false;
+    if(L.title&&L.title.includes('점심식사'))return false;
+    if(L.title&&L.title.includes('가치공유'))return false;
+    return true;
+  });
+
+  // 피드백 데이터 (t.feedback = {강의id: {score, comment}})
+  if(!t.feedback)t.feedback={};
+
+  const rows=fbLects.map(L=>{
+    const ins=byId(DB.instructors,L.instructorId);
+    const fb=t.feedback[L.id]||{score:0,comment:''};
+    const stars=[1,2,3,4,5].map(n=>`
+      <span onclick="setFBScore('${t.id}','${L.id}',${n})"
+        style="cursor:pointer;font-size:1.4rem;color:${n<=(fb.score||0)?'#f5a623':'#ddd'};transition:color .15s">★</span>`).join('');
+    return `<tr>
+      <td style="padding:10px 8px;font-weight:700;font-size:.82rem;min-width:100px">${esc(L.title)}</td>
+      <td style="padding:10px 8px;font-size:.8rem;color:#555">${esc(ins?.name||L.instructorName||'-')}</td>
+      <td style="padding:10px 8px;white-space:nowrap">${stars}
+        <span style="font-size:.8rem;color:#666;margin-left:4px">${fb.score?fb.score+'.0':'미평가'}</span>
+      </td>
+      <td style="padding:10px 8px;min-width:200px">
+        <textarea class="input" rows="2"
+          style="width:100%;font-size:.78rem;resize:vertical;min-height:48px"
+          placeholder="강사 피드백을 입력하세요..."
+          onblur="setFBComment('${t.id}','${L.id}',this.value)">${esc(fb.comment||'')}</textarea>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return sel+`
+  <div class="card card-pad">
+    <div class="card-title" style="margin-bottom:14px">📝 ${esc(t.name)} ${t.round}차 강사 피드백</div>
+    <div style="font-size:.8rem;color:var(--ink3);margin-bottom:12px">
+      ${t.date} · ${t.place||''} · 강의 ${fbLects.length}개
+    </div>
+    ${fbLects.length?`
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:2px solid var(--border)">
+        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">강의명</th>
+        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">강사</th>
+        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">별점</th>
+        <th style="padding:8px;text-align:left;font-size:.78rem;color:var(--ink2)">피드백 코멘트</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn primary" onclick="saveFeedback('${t.id}')">💾 피드백 저장</button>
+      <button class="btn ghost" onclick="clearFeedback('${t.id}')">🗑 전체 초기화</button>
+    </div>`
+    :'<div class="empty">피드백 대상 강의가 없습니다</div>'}
+  </div>`;
+}
+
+function setFBScore(tid,lid,score){
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  if(!t.feedback)t.feedback={};
+  if(!t.feedback[lid])t.feedback[lid]={score:0,comment:''};
+  t.feedback[lid].score=score;
+  save();
+  render();
+}
+
+function setFBComment(tid,lid,comment){
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  if(!t.feedback)t.feedback={};
+  if(!t.feedback[lid])t.feedback[lid]={score:0,comment:''};
+  t.feedback[lid].comment=comment.trim();
+  save();
+}
+
+function saveFeedback(tid){
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  sbPatch('trainings',tid,{attendees:t.attendees||[]});
+  save();
+  toast('✅ 피드백이 저장됐어요!');
+}
+
+function clearFeedback(tid){
+  if(!confirm('이 교육의 피드백을 모두 초기화할까요?'))return;
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  t.feedback={};
+  save();
+  render();
+  toast('피드백이 초기화됐어요');
+}
+
 function vSettings(){
   return `<div class="grid g2">
    <div class="card card-pad"><div class="card-title">화면 테마</div>
