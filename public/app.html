@@ -1615,9 +1615,12 @@ function openInstrModal(edit){
 function saveInstr(edit){
   const name=$('#iName').value.trim();if(!name){toast('강사명을 입력해주세요');return;}
   const obj={name,field:$('#iField').value.trim(),bio:$('#iBio').value.trim()};
-  if(edit)Object.assign(byId(DB.instructors,edit),obj);
-  else DB.instructors.push({id:'i'+Date.now(),...obj});
-  closeModal();save();render();toast('저장되었습니다');
+  let iid;
+  if(edit){Object.assign(byId(DB.instructors,edit),obj);iid=edit;}
+  else{iid='i'+Date.now();DB.instructors.push({id:iid,...obj});}
+  closeModal();save();
+  sbUpsert('instructors',{id:iid,...obj,manual_count:byId(DB.instructors,iid)?.manual_count||0});
+  render();toast('저장되었습니다');
 }
 function vInstructorDetail(iid){
   const i=byId(DB.instructors,iid);if(!i)return '<div class="empty">강사를 찾을 수 없습니다</div>';
