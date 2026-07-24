@@ -1638,9 +1638,23 @@ function vInstructorDetail(iid){
     <div>
       <div class="card card-pad ai-card"><div class="ai-eyebrow">✦ AI 강사 분석</div>
         <div style="font-size:.9rem;color:var(--ink2);margin-top:8px;line-height:1.7">${aiLine}</div></div>
-      <div class="card card-pad" style="margin-top:16px"><div class="card-title">최근 강의</div>
-        <div style="margin-top:8px">${perT.slice(0,4).map(x=>`<div class="spread" style="padding:8px 0;border-bottom:1px dashed var(--border);font-size:.88rem">
-          <span>${esc(x.t.name)} ${x.t.round}차 <span style="color:var(--ink3)">· ${x.t.date}</span></span><b class="num">${f1(x.v)}점</b></div>`).join('')||'<div class="empty">없음</div>'}</div></div>
+      <div class="card card-pad" style="margin-top:16px"><div class="card-title">교육 참여 이력 (${perT.length}건)</div>
+        <div style="margin-top:8px">${perT.length?`
+          <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+              <th style="padding:6px 4px;text-align:left;color:var(--ink2)">교육명</th>
+              <th style="padding:6px 4px;text-align:center;color:var(--ink2);white-space:nowrap">차수</th>
+              <th style="padding:6px 4px;text-align:center;color:var(--ink2)">일자</th>
+              <th style="padding:6px 4px;text-align:center;color:var(--ink2)">만족도</th>
+            </tr></thead>
+            <tbody>${perT.map(x=>`<tr style="border-bottom:1px dashed var(--border)">
+              <td style="padding:7px 4px;font-weight:600">${esc(x.t.name)}</td>
+              <td style="padding:7px 4px;text-align:center">${x.t.round}차</td>
+              <td style="padding:7px 4px;text-align:center;color:var(--ink3)">${x.t.date}</td>
+              <td style="padding:7px 4px;text-align:center"><b class="num">${x.v?f1(x.v)+'점':'-'}</b></td>
+            </tr>`).join('')}</tbody>
+          </table>`:'<div class="empty">없음</div>'}
+        </div></div>
     </div>
   </div>`;
 }
