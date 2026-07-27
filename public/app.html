@@ -1187,7 +1187,7 @@ function openEditTraining(tid){
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">강의 구성</label>
     <div style="display:grid;grid-template-columns:100px 1fr 90px 90px 64px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
-      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span style="text-align:center">테스트</span><span></span></div>
+      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span style="text-align:center">설문제외</span><span></span></div>
     <div id="lectList" onpaste="pasteLectData(event)"
   ondragover="event.preventDefault();this.style.background='#e8f2ec'"
   ondragleave="this.style.background=''"
@@ -1270,7 +1270,7 @@ function openTrainingModal(){
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">강의 구성 * <span style="font-weight:400;color:var(--ink3)">— 설문에 이 순서로 반복됩니다. 시간대는 보고서에 표시됩니다.</span></label>
     <div style="display:grid;grid-template-columns:100px 1fr 90px 90px 64px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
-      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span style="text-align:center">테스트</span><span></span></div>
+      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span style="text-align:center">설문제외</span><span></span></div>
     <div id="lectList"></div>
     <div class="row" style="margin-top:6px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
@@ -1311,8 +1311,8 @@ function renderLectRows(){
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강사명"
       value="${esc(L.instructorName||byId(DB.instructors,L.instructorId)?.name||'')}"
       oninput="LECT_DRAFT[${i}].instructorName=this.value;LECT_DRAFT[${i}].instructorId=''">
-    <label class="row" style="gap:4px;font-size:.72rem;color:var(--ink3);cursor:pointer;justify-content:center" title="테스트로 표시하면 이 과목은 설문조사에서 자동 제외됩니다">
-      <input type="checkbox" ${L.isTest?'checked':''} onchange="LECT_DRAFT[${i}].isTest=this.checked">테스트
+    <label class="row" style="gap:4px;font-size:.72rem;color:var(--ink3);cursor:pointer;justify-content:center" title="체크하면 이 과목은 설문조사에서 제외됩니다">
+      <input type="checkbox" ${L.isTest?'checked':''} onchange="LECT_DRAFT[${i}].isTest=this.checked">설문제외
     </label>
     <button class="btn sm ghost" style="padding:4px 6px" onclick="LECT_DRAFT.splice(${i},1);renderLectRows()">✕</button>
    </div>`).join('');
@@ -1876,7 +1876,7 @@ function vSurveys(){
       <div class="card-title">설문 문항 관리</div>
       ${sel?`<button class="btn sm primary" onclick="addSurveyExtra('${sel.id}')">＋ 문항 추가</button>`:''}
     </div>
-    <div class="card-sub" style="margin-bottom:12px">체크를 끄면 해당 과목은 설문에서 빠집니다 (교육일정에는 영향 없음). 테스트로 등록된 과목은 자동으로 제외됩니다.</div>
+    <div class="card-sub" style="margin-bottom:12px">체크를 끄면 해당 과목은 설문에서 빠집니다 (교육일정에는 영향 없음). 설문제외로 등록된 과목은 자동으로 제외됩니다.</div>
     ${sel?renderSurveyManageList(sel):'<div class="empty">교육을 선택해주세요</div>'}
   </div>`;
 }
@@ -1892,7 +1892,7 @@ function renderSurveyManageList(t){
         <input type="checkbox" ${on?'checked':''} onchange="toggleSurveyLect('${t.id}','${L.id}')">
         <span style="font-weight:700;${on?'':'color:var(--ink4);text-decoration:line-through'}">${esc(L.title)}</span>
         <span class="card-sub">${esc(L.instructorName||ins?.name||'')}</span>
-        ${L.isTest?'<span class="badge amber">테스트</span>':''}
+        ${L.isTest?'<span class="badge amber">설문제외</span>':''}
         ${!on?'<span class="badge gray">설문 제외</span>':''}
       </label>
     </div>`;
