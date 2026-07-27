@@ -881,11 +881,52 @@ async function sbPatch(table, id, data){
   }catch(e){console.warn('Supabase 업데이트 오류:',e);}
 }
 
+// 삭제 기록을 서버(deleted_ids 테이블)에도 남겨서, 다른 브라우저/기기에서도
+// 이 항목이 삭제됐다는 걸 알고 다시 살아나지 않게 함 (기존에는 삭제한 그 브라우저에만 기록이 남아
+// 새 브라우저에서는 삭제된 항목이 다시 보이는 문제가 있었음)
+function sbRecordDeletion(kind,itemId){
+  try{
+    fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/deleted_ids',{
+      method:'POST',
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({kind,item_id:itemId})
+    });
+  }catch(e){}
+}
+async function syncDeletedIds(){
+  try{
+    const rr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/deleted_ids?select=*',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    if(!rr.ok)return; // deleted_ids 테이블이 없으면 조용히 건너뜀 (아직 SQL을 실행하지 않은 경우)
+    const rows=await rr.json();
+    if(!rows||!rows.length)return;
+    DB.deletedResponseIds=DB.deletedResponseIds||[];
+    DB.deletedTestRecordIds=DB.deletedTestRecordIds||[];
+    DB.deletedLinkTabIds=DB.deletedLinkTabIds||[];
+    const map={response:DB.deletedResponseIds,test_record:DB.deletedTestRecordIds,link_tab:DB.deletedLinkTabIds};
+    rows.forEach(row=>{
+      const arr=map[row.kind];
+      if(!arr)return;
+      if(!arr.includes(row.item_id))arr.push(row.item_id);
+    });
+    // 다른 브라우저에서 삭제한 항목이 이 브라우저에 이미 남아있다면 지금 바로 제거
+    DB.responses=(DB.responses||[]).filter(r=>!DB.deletedResponseIds.includes(r.id));
+    DB.testRecords=(DB.testRecords||[]).filter(r=>!DB.deletedTestRecordIds.includes(r.id));
+    DB.linkTabs=(DB.linkTabs||[]).filter(t=>!DB.deletedLinkTabIds.includes(t.id));
+    if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
+    save();
+  }catch(e){console.warn('삭제 기록 동기화 오류:',e);}
+}
+
 let _syncing=false;
 async function syncFromSupabase(){
   if(_syncing)return;
   _syncing=true;
   try{
+    // 삭제 기록을 가장 먼저 동기화 — 아래에서 교육/응답/테스트/링크를 받아올 때
+    // 다른 브라우저에서 이미 삭제한 항목이 되살아나지 않도록 함
+    await syncDeletedIds();
     // 교육 목록 동기화
     const tr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?select=*&order=date.desc',{
       headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
@@ -1116,6 +1157,7 @@ async function deleteResponse(rid, tid){
   // 서버 삭제가 (권한 등의 이유로) 실패해도 새로고침 시 다시 나타나지 않도록 로컬에 삭제 기록을 남김
   DB.deletedResponseIds=DB.deletedResponseIds||[];
   if(!DB.deletedResponseIds.includes(rid))DB.deletedResponseIds.push(rid);
+  sbRecordDeletion('response',rid); // 다른 브라우저에서도 이 삭제를 알 수 있도록 서버에 기록
   delete DB.ai[tid]; save();
   try{
     const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/responses?id=eq.'+rid,{
@@ -2161,7 +2203,7 @@ async function cleanOpinionsWithAI(opinions){
 
 JSON 배열로만 응답하세요 (설명 없이, 마크다운 없이):
 ${JSON.stringify(opinions)}`;
-    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}',{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
@@ -3859,6 +3901,7 @@ function deleteTestRecord(id){
   if(!DB.deletedTestRecordIds.includes(id))DB.deletedTestRecordIds.push(id);
   save();render();
   sbDeleteTestRecord(id);
+  sbRecordDeletion('test_record',id); // 다른 브라우저에서도 이 삭제를 알 수 있도록 서버에 기록
   toast('테스트 결과가 삭제되었습니다');
 }
 
@@ -3937,6 +3980,7 @@ function deleteLinkTab(id){
   if(LT_TAB===id)LT_TAB=DB.linkTabs[0].id;
   save();render();
   sbDeleteLinkTab(id);
+  sbRecordDeletion('link_tab',id); // 다른 브라우저에서도 이 삭제를 알 수 있도록 서버에 기록
 }
 function addLink(tabId){
   const tab=DB.linkTabs.find(t=>t.id===tabId);if(!tab)return;
