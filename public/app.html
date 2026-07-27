@@ -293,7 +293,6 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 </head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <body>
 <div id="app"></div>
 <div class="toast" id="toast"></div>
@@ -3298,8 +3297,7 @@ function resetFBOpinions(tid,instr){
 const TESTLOG_ROLES=['점장','부점장','OFC','개점지원담당'];
 let TL_ROLE=TESTLOG_ROLES[0];
 let TL_Q='';
-let TL_DRAFT=null; // 추가/수정 모달 draft
-let TL_IMPORT=null; // 엑셀/CSV 업로드 매핑 draft
+let TL_BULK=null; // 추가/수정 모달 draft: {mode,editId,role,testName,date,subjects:[],rows:[]}
 
 function vTestLog(){
   DB.testRecords=DB.testRecords||[];
@@ -3321,8 +3319,6 @@ function vTestLog(){
     }).join('')}
     <span style="margin-left:auto"></span>
     <input class="input" style="max-width:220px" placeholder="테스트명·이름·사번·점포 검색" value="${esc(TL_Q)}" oninput="TL_Q=this.value;rerender()">
-    <label class="btn sm" style="cursor:pointer;margin:0">📂 엑셀/CSV 업로드
-      <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleTestUpload(event)"></label>
     <button class="btn primary sm" onclick="openTestModal()">＋ 테스트 결과 추가</button>
   </div>`;
 
@@ -3333,7 +3329,7 @@ function vTestLog(){
   </div>`;
 
   if(!totalN){
-    return tabs+summary+'<div class="empty">등록된 테스트 이력이 없습니다. "＋ 테스트 결과 추가" 또는 "📂 엑셀/CSV 업로드"로 등록해주세요.</div>';
+    return tabs+summary+'<div class="empty">등록된 테스트 이력이 없습니다. "＋ 테스트 결과 추가"로 등록해주세요.</div>';
   }
 
   // 테스트명별로 그룹핑
@@ -3353,6 +3349,9 @@ function vTestLog(){
     const rows=byName[name].slice().sort((a,b)=>a.date<b.date?1:-1);
     const n=rows.length,p=rows.filter(r=>r.passed).length;
     const avgS=avg(rows.map(r=>+r.score||0));
+    // 이 테스트명 안에서 실제로 쓰인 과목들을 등장 순서대로 합침 (과목 수가 기록마다 다를 수 있음)
+    const subjNames=[];
+    rows.forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
     return `<div class="card" style="margin-bottom:14px">
       <div class="card-pad" style="border-bottom:1px solid var(--border)">
         <div class="spread">
@@ -3365,21 +3364,24 @@ function vTestLog(){
         </div>
       </div>
       <div style="overflow-x:auto"><table class="tbl">
-        <thead><tr><th>응시자</th><th>사번</th><th>점포/직무</th><th>근속</th><th>응시일</th><th style="text-align:center">점수</th><th style="text-align:center">결과</th><th>비고</th><th></th></tr></thead>
-        <tbody>${rows.map(r=>`<tr>
+        <thead><tr><th>팀</th><th>성명</th><th>사번</th><th>근속</th><th>응시일</th><th style="text-align:center">총점수</th>${subjNames.map(s=>`<th style="text-align:center">${esc(s)}</th>`).join('')}<th style="text-align:center">백분율</th><th style="text-align:center">결과</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>{
+          const scoreOf=sn=>{const f=(r.subjects||[]).find(s=>s.name===sn);return f&&f.score!==''&&f.score!=null?esc(String(f.score)):'-';};
+          return `<tr>
+          <td>${esc(r.store||'-')}</td>
           <td style="font-weight:700">${esc(r.person||'-')}</td>
           <td class="num">${esc(r.empNo||'-')}</td>
-          <td>${esc(r.store||'-')}</td>
           <td>${esc(r.tenure||'-')}</td>
           <td class="num">${esc(r.date||'-')}</td>
           <td class="num" style="text-align:center">${r.score===''||r.score==null?'-':esc(String(r.score))}</td>
+          ${subjNames.map(sn=>`<td class="num" style="text-align:center">${scoreOf(sn)}</td>`).join('')}
+          <td class="num" style="text-align:center">${r.percent===''||r.percent==null?'-':esc(String(r.percent))}</td>
           <td style="text-align:center"><span class="badge ${r.passed?'green':'red'}">${r.passed?'합격':'불합격'}</span></td>
-          <td style="color:var(--ink3);font-size:.82rem">${esc(r.memo||'')}</td>
           <td style="white-space:nowrap">
             <button class="btn sm ghost" style="padding:3px 6px" onclick="openTestModal('${r.id}')">✎</button>
             <button class="btn sm ghost" style="padding:3px 6px" onclick="deleteTestRecord('${r.id}')">🗑</button>
           </td>
-        </tr>`).join('')}</tbody>
+        </tr>`;}).join('')}</tbody>
       </table></div>
     </div>`;
   }).join('');
@@ -3387,65 +3389,166 @@ function vTestLog(){
   return tabs+summary+groups;
 }
 
-function openTestModal(id){
-  const editing=id?DB.testRecords.find(r=>r.id===id):null;
-  TL_DRAFT=editing?{...editing}:{id:'',role:TL_ROLE,testName:'',person:'',empNo:'',store:'',tenure:'',date:new Date().toISOString().slice(0,10),score:'',passed:true,memo:''};
-  const existingNames=[...new Set(DB.testRecords.filter(r=>r.role===TL_DRAFT.role).map(r=>r.testName).filter(Boolean))];
-  openModal(editing?'테스트 결과 수정':'테스트 결과 추가',`
-   <div class="fld-group"><label class="fld">직책 *</label>
-    <select class="select" id="tlRole">${TESTLOG_ROLES.map(r=>`<option ${TL_DRAFT.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
-   <div class="fld-group"><label class="fld">테스트명 *</label>
-    <input class="input" id="tlName" list="tlNameList" placeholder="예) 26년 상반기 OFC테스트" value="${esc(TL_DRAFT.testName)}">
-    <datalist id="tlNameList">${existingNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">응시자 *</label><input class="input" id="tlPerson" placeholder="성명" value="${esc(TL_DRAFT.person)}"></div>
-    <div class="fld-group"><label class="fld">사번</label><input class="input" id="tlEmpNo" placeholder="사번" value="${esc(TL_DRAFT.empNo||'')}"></div>
-   </div>
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">점포/직무</label><input class="input" id="tlStore" placeholder="점포명 또는 팀/직무" value="${esc(TL_DRAFT.store)}"></div>
-    <div class="fld-group"><label class="fld">근속</label><input class="input" id="tlTenure" placeholder="예) 2년 3개월" value="${esc(TL_DRAFT.tenure||'')}"></div>
-   </div>
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">응시일</label><input class="input" id="tlDate" type="date" value="${TL_DRAFT.date}"></div>
-    <div class="fld-group"><label class="fld">점수</label><input class="input num" id="tlScore" type="number" min="0" max="100" placeholder="0~100" value="${esc(TL_DRAFT.score)}"></div>
-   </div>
-   <div class="fld-group"><label class="fld">결과</label>
-    <div class="row" style="gap:14px">
-     <label class="row" style="gap:6px;cursor:pointer"><input type="radio" name="tlPassed" value="1" ${TL_DRAFT.passed?'checked':''}>합격</label>
-     <label class="row" style="gap:6px;cursor:pointer"><input type="radio" name="tlPassed" value="0" ${!TL_DRAFT.passed?'checked':''}>불합격</label>
-    </div></div>
-   <div class="fld-group"><label class="fld">비고</label><textarea class="input" id="tlMemo" rows="2">${esc(TL_DRAFT.memo||'')}</textarea></div>
-  `,`<button class="btn" onclick="closeModal()">취소</button>
-   <button class="btn primary" onclick="saveTestRecord('${editing?editing.id:''}')">저장</button>`);
+function tlEmptyRow(nSubj){return {team:'',person:'',empNo:'',tenure:'',total:'',scores:new Array(nSubj||0).fill(''),percent:'',passed:true};}
+function tlRowFromRecord(rec){
+  return {team:rec.store||'',person:rec.person||'',empNo:rec.empNo||'',tenure:rec.tenure||'',
+    total:rec.score??'',scores:(rec.subjects||[]).map(s=>s.score??''),percent:rec.percent??'',passed:!!rec.passed};
 }
 
-function saveTestRecord(id){
-  const role=$('#tlRole').value;
-  const testName=$('#tlName').value.trim();
-  const person=$('#tlPerson').value.trim();
-  const empNo=$('#tlEmpNo').value.trim();
-  const store=$('#tlStore').value.trim();
-  const tenure=$('#tlTenure').value.trim();
-  const date=$('#tlDate').value||new Date().toISOString().slice(0,10);
-  const scoreRaw=$('#tlScore').value;
-  const score=scoreRaw===''?'':Math.max(0,Math.min(100,+scoreRaw||0));
-  const passed=document.querySelector('input[name="tlPassed"]:checked')?.value==='1';
-  const memo=$('#tlMemo').value.trim();
-  if(!testName||!person){toast('테스트명과 응시자를 입력해주세요');return;}
-  DB.testRecords=DB.testRecords||[];
-  let rec;
-  if(id){
-    rec=DB.testRecords.find(x=>x.id===id);
-    if(rec)Object.assign(rec,{role,testName,person,empNo,store,tenure,date,score,passed,memo});
+function openTestModal(id){
+  const editing=id?DB.testRecords.find(r=>r.id===id):null;
+  if(editing){
+    TL_BULK={mode:'edit',editId:id,role:editing.role,testName:editing.testName,date:editing.date||new Date().toISOString().slice(0,10),
+      subjects:(editing.subjects||[]).map(s=>s.name),rows:[tlRowFromRecord(editing)]};
   }else{
-    rec={id:'tl'+Date.now(),role,testName,person,empNo,store,tenure,date,score,passed,memo};
-    DB.testRecords.push(rec);
+    TL_BULK={mode:'add',editId:'',role:TL_ROLE,testName:'',date:new Date().toISOString().slice(0,10),subjects:[],rows:[tlEmptyRow(0)]};
+  }
+  const existingNames=[...new Set(DB.testRecords.filter(r=>r.role===TL_BULK.role).map(r=>r.testName).filter(Boolean))];
+  const pasteBox=TL_BULK.mode==='add'?`
+   <div class="fld-group"><label class="fld">엑셀에서 복사한 내용 붙여넣기 <span style="font-weight:400;color:var(--ink3)">— 팀, 성명, 사번, 근속년수, 총점수, 과목(개수 자유), 백분율, 통과여부 순서 · 첫 줄은 헤더(과목명 포함)</span></label>
+    <textarea class="input" id="tbPaste" rows="3" placeholder="팀	성명	사번	근속년수	총점수	과목1	과목2	과목3	과목4	백분율	통과여부"></textarea>
+    <div class="row" style="margin-top:6px;gap:8px">
+     <button class="btn sm primary" onclick="applyTestPaste()">📋 붙여넣기 반영</button>
+     <span class="card-sub">엑셀 표를 복사한 뒤 위 칸에 붙여넣고 버튼을 눌러주세요 (아래 표 내용이 통째로 교체됩니다)</span>
+    </div></div>
+   <div class="divider"></div>`:'';
+  openModal(editing?'테스트 결과 수정':'테스트 결과 추가',`
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">직책 *</label>
+     <select class="select" id="tbRole">${TESTLOG_ROLES.map(r=>`<option ${TL_BULK.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
+    <div class="fld-group"><label class="fld">응시일 (전체 적용)</label><input class="input" id="tbDate" type="date" value="${TL_BULK.date}"></div>
+   </div>
+   <div class="fld-group"><label class="fld">테스트명 *</label>
+    <input class="input" id="tbName" list="tbNameList" placeholder="예) 26년 상반기 OFC테스트" value="${esc(TL_BULK.testName)}">
+    <datalist id="tbNameList">${existingNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
+   <div class="divider"></div>
+   ${pasteBox}
+   <div class="fld-group">
+    <div class="spread" style="margin-bottom:6px">
+     <label class="fld" style="margin:0">과목 구성</label>
+     <button class="btn sm" onclick="addTlSubject()">＋ 과목 추가</button>
+    </div>
+    <div id="tlSubjectChips"></div>
+   </div>
+   <div id="tlRowsWrap" style="overflow-x:auto"></div>
+   ${TL_BULK.mode==='add'?`<div class="row" style="margin-top:8px"><button class="btn sm" onclick="addTlRow()">＋ 행 추가</button></div>`:''}
+  `,`<button class="btn" onclick="closeModal()">취소</button>
+   <button class="btn primary" onclick="saveTestBulk()">저장</button>`);
+  renderTlSubjectChips();renderTlRowsTable();
+}
+
+function renderTlSubjectChips(){
+  const el=$('#tlSubjectChips');if(!el)return;
+  if(!TL_BULK.subjects.length){el.innerHTML='<span class="card-sub">등록된 과목이 없습니다 — 총점수만 관리하거나 "＋ 과목 추가"로 만들어주세요</span>';return;}
+  el.innerHTML=TL_BULK.subjects.map((s,i)=>`
+    <span class="badge gray" style="margin:2px 4px 2px 0;padding:3px 6px 3px 10px;display:inline-flex;align-items:center;gap:6px">
+      <input value="${esc(s)}" oninput="renameTlSubject(${i},this.value)" style="border:none;background:transparent;outline:none;width:${Math.max(48,s.length*9)}px;font:inherit;font-weight:700;color:inherit">
+      <span style="cursor:pointer" onclick="removeTlSubject(${i})" title="과목 삭제">✕</span>
+    </span>`).join('');
+}
+function renderTlRowsTable(){
+  const el=$('#tlRowsWrap');if(!el)return;
+  const subj=TL_BULK.subjects;
+  const head=`<tr><th>팀</th><th>성명</th><th>사번</th><th>근속</th><th style="width:70px">총점수</th>${subj.map(s=>`<th>${esc(s)}</th>`).join('')}<th style="width:70px">백분율</th><th style="width:90px">통과여부</th>${TL_BULK.mode==='add'?'<th></th>':''}</tr>`;
+  const body=TL_BULK.rows.map((r,i)=>`<tr>
+    <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.team||'')}" oninput="TL_BULK.rows[${i}].team=this.value"></td>
+    <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.person||'')}" oninput="TL_BULK.rows[${i}].person=this.value"></td>
+    <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.empNo||'')}" oninput="TL_BULK.rows[${i}].empNo=this.value"></td>
+    <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.tenure||'')}" oninput="TL_BULK.rows[${i}].tenure=this.value"></td>
+    <td><input class="input num" style="padding:5px 6px;font-size:.78rem;width:60px" value="${esc(r.total??'')}" oninput="TL_BULK.rows[${i}].total=this.value"></td>
+    ${subj.map((s,si)=>`<td><input class="input num" style="padding:5px 6px;font-size:.78rem;width:52px" value="${esc((r.scores&&r.scores[si])??'')}" oninput="TL_BULK.rows[${i}].scores[${si}]=this.value"></td>`).join('')}
+    <td><input class="input num" style="padding:5px 6px;font-size:.78rem;width:56px" value="${esc(r.percent??'')}" oninput="TL_BULK.rows[${i}].percent=this.value"></td>
+    <td><select class="select" style="padding:5px 6px;font-size:.78rem" onchange="TL_BULK.rows[${i}].passed=(this.value==='1')">
+      <option value="1" ${r.passed?'selected':''}>합격</option><option value="0" ${!r.passed?'selected':''}>불합격</option></select></td>
+    ${TL_BULK.mode==='add'?`<td><button class="btn sm ghost" style="padding:3px 6px" onclick="removeTlRow(${i})">✕</button></td>`:''}
+  </tr>`).join('');
+  el.innerHTML=`<table class="tbl" style="min-width:560px">${head}<tbody>${body}</tbody></table>`;
+}
+function addTlSubject(){
+  TL_BULK.subjects.push('과목'+(TL_BULK.subjects.length+1));
+  TL_BULK.rows.forEach(r=>{r.scores=r.scores||[];r.scores.push('');});
+  renderTlSubjectChips();renderTlRowsTable();
+}
+function removeTlSubject(i){
+  TL_BULK.subjects.splice(i,1);
+  TL_BULK.rows.forEach(r=>{if(r.scores)r.scores.splice(i,1);});
+  renderTlSubjectChips();renderTlRowsTable();
+}
+function renameTlSubject(i,val){TL_BULK.subjects[i]=val;}
+function addTlRow(){TL_BULK.rows.push(tlEmptyRow(TL_BULK.subjects.length));renderTlRowsTable();}
+function removeTlRow(i){TL_BULK.rows.splice(i,1);renderTlRowsTable();}
+
+function tlNormPass(v){
+  const s=String(v??'').trim();
+  if(/^(합격|통과|o|pass|y|true|1)$/i.test(s))return true;
+  if(/^(불합격|x|fail|n|false|0)$/i.test(s))return false;
+  return null;
+}
+function applyTestPaste(){
+  const text=$('#tbPaste').value;
+  const lines=text.split(/\r?\n/).filter(l=>l.trim().length);
+  if(!lines.length){toast('붙여넣을 내용이 없습니다');return;}
+  const sep=lines[0].includes('\t')?'\t':',';
+  const header=lines[0].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim());
+  if(header.length<7){toast('열 개수를 확인해주세요 (팀·성명·사번·근속년수·총점수·과목...·백분율·통과여부 순서)');return;}
+  const subjects=header.slice(5,header.length-2);
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=lines[i].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim());
+    const person=cols[1]||'';
+    if(!person)continue;
+    const total=cols[4]??'';
+    const passRaw=tlNormPass(cols[header.length-1]);
+    rows.push({team:cols[0]||'',person,empNo:cols[2]||'',tenure:cols[3]||'',total,
+      scores:subjects.map((_,si)=>cols[5+si]??''),percent:cols[header.length-2]??'',
+      passed:passRaw===null?true:passRaw});
+  }
+  if(!rows.length){toast('인식된 행이 없습니다 — 첫 줄(헤더)을 포함해 붙여넣었는지 확인해주세요');return;}
+  TL_BULK.subjects=subjects;
+  TL_BULK.rows=rows;
+  renderTlSubjectChips();renderTlRowsTable();
+  toast(`${rows.length}행을 표에 반영했습니다 — 확인 후 저장을 눌러주세요`);
+}
+
+function saveTestBulk(){
+  const role=$('#tbRole').value;
+  const testName=$('#tbName').value.trim();
+  const date=$('#tbDate').value||new Date().toISOString().slice(0,10);
+  if(!testName){toast('테스트명을 입력해주세요');return;}
+  const validRows=TL_BULK.rows.filter(r=>(r.person||'').trim());
+  if(!validRows.length){toast('응시자가 있는 행이 없습니다');return;}
+  DB.testRecords=DB.testRecords||[];
+  const subjects=TL_BULK.subjects;
+  const buildSubj=r=>subjects.map((name,si)=>({name,score:(r.scores&&r.scores[si]!==''&&r.scores[si]!=null)?(+r.scores[si]||0):''}));
+  const newRecs=[];
+  if(TL_BULK.mode==='edit'&&TL_BULK.editId){
+    const rec=DB.testRecords.find(x=>x.id===TL_BULK.editId);
+    const r=validRows[0];
+    if(rec){
+      Object.assign(rec,{role,testName,date,person:r.person.trim(),empNo:(r.empNo||'').trim(),
+        store:(r.team||'').trim(),tenure:(r.tenure||'').trim(),
+        score:r.total===''?'':Math.max(0,Math.min(100,+r.total||0)),
+        percent:r.percent===''?'':(+r.percent||0),
+        passed:!!r.passed,subjects:buildSubj(r)});
+      newRecs.push(rec);
+    }
+  }else{
+    validRows.forEach((r,i)=>{
+      const rec={id:'tl'+Date.now()+'_'+i,role,testName,date,
+        person:r.person.trim(),empNo:(r.empNo||'').trim(),store:(r.team||'').trim(),tenure:(r.tenure||'').trim(),
+        score:r.total===''?'':Math.max(0,Math.min(100,+r.total||0)),
+        percent:r.percent===''?'':(+r.percent||0),
+        passed:!!r.passed,subjects:buildSubj(r),memo:''};
+      DB.testRecords.push(rec);
+      newRecs.push(rec);
+    });
   }
   TL_ROLE=role;
   save();
-  if(rec)sbUpsertTestRecord(rec);
+  newRecs.forEach(sbUpsertTestRecord);
+  TL_BULK=null;
   closeModal();render();
-  toast(id?'테스트 결과가 수정되었습니다':'테스트 결과가 등록되었습니다');
+  toast(`${newRecs.length}건 저장했습니다`);
 }
 
 function deleteTestRecord(id){
@@ -3461,7 +3564,9 @@ function deleteTestRecord(id){
 /* ── Supabase 연동 (공유를 위해 test_records 테이블 사용 — 사전에 테이블 생성 필요) ── */
 function sbUpsertTestRecord(r){
   sbUpsert('test_records',{id:r.id,role:r.role,test_name:r.testName,person:r.person,emp_no:r.empNo||'',
-    store:r.store||'',tenure:r.tenure||'',date:r.date||'',score:r.score===''?null:r.score,passed:!!r.passed,memo:r.memo||''});
+    store:r.store||'',tenure:r.tenure||'',date:r.date||'',score:r.score===''?null:r.score,
+    percent:r.percent===''||r.percent==null?null:r.percent,passed:!!r.passed,memo:r.memo||'',
+    subjects:r.subjects||[]});
 }
 async function sbDeleteTestRecord(id){
   try{
@@ -3485,178 +3590,13 @@ async function syncTestRecords(){
       if(delSet.has(row.id))return;
       if(DB.testRecords.find(x=>x.id===row.id))return;
       DB.testRecords.push({id:row.id,role:row.role,testName:row.test_name,person:row.person,empNo:row.emp_no||'',
-        store:row.store||'',tenure:row.tenure||'',date:row.date||'',score:row.score===null?'':row.score,passed:!!row.passed,memo:row.memo||''});
+        store:row.store||'',tenure:row.tenure||'',date:row.date||'',score:row.score===null?'':row.score,
+        percent:row.percent===null?'':row.percent,passed:!!row.passed,memo:row.memo||'',subjects:row.subjects||[]});
     });
     save();
   }catch(e){console.warn('테스트 이력 동기화 오류:',e);}
 }
 
-/* ── 엑셀/CSV 업로드: 헤더 자동 인식 + 열 매핑 ── */
-const TL_HEADER_HINTS={
-  name:/이름|성명/,empNo:/사번/,store:/팀|직무(?!근속)|점포/,tenure:/근속/,
-  score:/점수/,pass:/pass/i,memo:/비고/
-};
-function tlDetectHeaderRow(rows){
-  let best=0,bestScore=-1;
-  for(let i=0;i<Math.min(6,rows.length);i++){
-    const cells=(rows[i]||[]).map(c=>String(c??''));
-    let s=0;
-    if(cells.some(c=>TL_HEADER_HINTS.name.test(c)))s++;
-    if(cells.some(c=>TL_HEADER_HINTS.empNo.test(c)))s++;
-    if(cells.some(c=>TL_HEADER_HINTS.score.test(c)))s++;
-    if(cells.some(c=>TL_HEADER_HINTS.store.test(c)))s++;
-    if(cells.some(c=>TL_HEADER_HINTS.tenure.test(c)))s++;
-    if(s>bestScore){bestScore=s;best=i;}
-  }
-  return bestScore>=2?best:0;
-}
-function tlGuessCol(headerRow,type){
-  const cells=headerRow.map(c=>String(c??'').trim());
-  if(type==='score'){
-    // 정확히 '점수'/'총점수'/'총 점수' 우선, '지난'(이전 차수) 포함 열은 제외
-    let idx=cells.findIndex(c=>/^(점수|총점수|총\s*점수)$/.test(c));
-    if(idx<0)idx=cells.findIndex(c=>TL_HEADER_HINTS.score.test(c)&&!/지난|이전|평균|比/.test(c));
-    if(idx<0)idx=cells.findIndex(c=>TL_HEADER_HINTS.score.test(c));
-    return idx;
-  }
-  return cells.findIndex(c=>TL_HEADER_HINTS[type].test(c));
-}
-function handleTestUpload(e){
-  const file=e.target.files[0];
-  if(!file)return;
-  const ext=(file.name.split('.').pop()||'').toLowerCase();
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    let sheets={};
-    if(ext==='csv'){
-      const text=String(ev.target.result||'');
-      const lines=text.split(/\r?\n/).filter(l=>l.length);
-      const sep=lines[0]&&lines[0].includes('\t')?'\t':',';
-      const rows=lines.map(l=>l.split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim()));
-      sheets={'CSV':rows};
-    }else{
-      if(typeof XLSX==='undefined'){toast('엑셀 파싱 라이브러리를 불러오지 못했습니다 — CSV 파일로 업로드해주세요');return;}
-      const wb=XLSX.read(ev.target.result,{type:'array'});
-      wb.SheetNames.forEach(name=>{
-        sheets[name]=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:false});
-      });
-    }
-    const sheetNames=Object.keys(sheets);
-    if(!sheetNames.length){toast('파일에서 데이터를 찾을 수 없습니다');return;}
-    TL_IMPORT={sheets,sheetNames,activeSheet:sheetNames[0],role:TL_ROLE,testName:'',
-      date:new Date().toISOString().slice(0,10),passThreshold:60};
-    openImportMappingModal();
-  };
-  if(ext==='csv')reader.readAsText(file,'utf-8');else reader.readAsArrayBuffer(file);
-  e.target.value=''; // 같은 파일 재업로드 허용
-}
-function openImportMappingModal(){
-  const rows=TL_IMPORT.sheets[TL_IMPORT.activeSheet]||[];
-  const headerIdx=tlDetectHeaderRow(rows);
-  const headerRow=rows[headerIdx]||[];
-  const colOpts=(sel)=>{
-    let out=`<option value="-1" ${sel===-1?'selected':''}>(사용 안함)</option>`;
-    headerRow.forEach((h,i)=>{
-      const label=String(h??'').replace(/\n/g,' ').trim()||`(빈 헤더 열 ${i+1})`;
-      out+=`<option value="${i}" ${sel===i?'selected':''}>열${i+1}: ${esc(label.slice(0,24))}</option>`;
-    });
-    return out;
-  };
-  const guess={
-    name:tlGuessCol(headerRow,'name'),empNo:tlGuessCol(headerRow,'empNo'),
-    store:tlGuessCol(headerRow,'store'),tenure:tlGuessCol(headerRow,'tenure'),
-    score:tlGuessCol(headerRow,'score'),pass:tlGuessCol(headerRow,'pass'),memo:tlGuessCol(headerRow,'memo')
-  };
-  const previewRows=rows.slice(headerIdx+1,headerIdx+4).filter(r=>r.some(c=>String(c??'').trim()));
-  openModal('엑셀/CSV 업로드 — 열 매핑',`
-   ${TL_IMPORT.sheetNames.length>1?`<div class="fld-group"><label class="fld">시트 선택</label>
-    <select class="select" onchange="TL_IMPORT.activeSheet=this.value;openImportMappingModal()">
-      ${TL_IMPORT.sheetNames.map(n=>`<option value="${esc(n)}" ${TL_IMPORT.activeSheet===n?'selected':''}>${esc(n)}</option>`).join('')}
-    </select></div>`:''}
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">직책 *</label>
-     <select class="select" id="tiRole">${TESTLOG_ROLES.map(r=>`<option ${TL_IMPORT.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
-    <div class="fld-group"><label class="fld">응시일 (전체 적용)</label><input class="input" id="tiDate" type="date" value="${TL_IMPORT.date}"></div>
-   </div>
-   <div class="fld-group"><label class="fld">테스트명 * <span style="font-weight:400;color:var(--ink3)">— 업로드되는 모든 행에 동일하게 적용됩니다</span></label>
-    <input class="input" id="tiName" placeholder="예) 26년 상반기 OFC테스트" value="${esc(TL_IMPORT.testName||TL_IMPORT.activeSheet)}"></div>
-   <div class="divider"></div>
-   <div class="card-sub" style="margin-bottom:8px">헤더 행: ${headerIdx+1}번째 줄로 자동 인식했습니다. 아래에서 각 항목이 어느 열에 해당하는지 확인·수정해주세요.</div>
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">응시자(이름) *</label><select class="select" id="tiColName">${colOpts(guess.name)}</select></div>
-    <div class="fld-group"><label class="fld">사번</label><select class="select" id="tiColEmpNo">${colOpts(guess.empNo)}</select></div>
-   </div>
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">점포/팀/직무</label><select class="select" id="tiColStore">${colOpts(guess.store)}</select></div>
-    <div class="fld-group"><label class="fld">근속</label><select class="select" id="tiColTenure">${colOpts(guess.tenure)}</select></div>
-   </div>
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">점수 *</label><select class="select" id="tiColScore">${colOpts(guess.score)}</select></div>
-    <div class="fld-group"><label class="fld">합격여부 열 <span style="font-weight:400;color:var(--ink3)">(PASS/O·X 등)</span></label><select class="select" id="tiColPass">${colOpts(guess.pass)}</select></div>
-   </div>
-   <div class="grid g2">
-    <div class="fld-group"><label class="fld">비고</label><select class="select" id="tiColMemo">${colOpts(guess.memo)}</select></div>
-    <div class="fld-group"><label class="fld">합격 기준 점수 <span style="font-weight:400;color:var(--ink3)">(합격여부 열 없을 때만 사용)</span></label>
-     <input class="input num" id="tiThreshold" type="number" min="0" max="100" value="${TL_IMPORT.passThreshold}"></div>
-   </div>
-   ${previewRows.length?`<div class="divider"></div>
-   <div class="card-sub" style="margin-bottom:6px">미리보기 (상위 ${previewRows.length}행)</div>
-   <div style="overflow-x:auto;max-height:160px"><table class="tbl" style="font-size:.78rem">
-    <tbody>${previewRows.map(r=>`<tr>${headerRow.map((_,i)=>`<td>${esc(String(r[i]??''))}</td>`).join('')}</tr>`).join('')}</tbody>
-   </table></div>`:''}
-  `,`<button class="btn" onclick="closeModal()">취소</button>
-   <button class="btn primary" onclick="importTestRows(${headerIdx})">가져오기</button>`);
-}
-function tlNormPass(v){
-  const s=String(v??'').trim();
-  if(/^(o|pass|합격|통과|y|true|1)$/i.test(s))return true;
-  if(/^(x|fail|불합격|n|false|0)$/i.test(s))return false;
-  return null;
-}
-function importTestRows(headerIdx){
-  const rows=TL_IMPORT.sheets[TL_IMPORT.activeSheet]||[];
-  const role=$('#tiRole').value;
-  const testName=$('#tiName').value.trim();
-  const date=$('#tiDate').value||new Date().toISOString().slice(0,10);
-  const cName=+$('#tiColName').value,cEmpNo=+$('#tiColEmpNo').value,cStore=+$('#tiColStore').value,
-    cTenure=+$('#tiColTenure').value,cScore=+$('#tiColScore').value,cPass=+$('#tiColPass').value,cMemo=+$('#tiColMemo').value;
-  const threshold=+$('#tiThreshold').value||0;
-  if(!testName){toast('테스트명을 입력해주세요');return;}
-  if(cName<0||cScore<0){toast('응시자(이름)와 점수 열은 필수로 선택해주세요');return;}
-  DB.testRecords=DB.testRecords||[];
-  let added=0,skipped=0;
-  const newRecs=[];
-  for(let i=headerIdx+1;i<rows.length;i++){
-    const row=rows[i]||[];
-    const person=String(row[cName]??'').trim();
-    if(!person){skipped++;continue;}
-    const scoreRaw=String(row[cScore]??'').trim();
-    const score=scoreRaw===''?'':Math.max(0,Math.min(100,Math.round(parseFloat(scoreRaw))||0));
-    let passed;
-    if(cPass>=0){
-      const norm=tlNormPass(row[cPass]);
-      passed=norm===null?(score!==''&&+score>=threshold):norm;
-    }else{
-      passed=score!==''&&+score>=threshold;
-    }
-    const rec={id:'tl'+Date.now()+'_'+i,role,testName,person,
-      empNo:cEmpNo>=0?String(row[cEmpNo]??'').trim():'',
-      store:cStore>=0?String(row[cStore]??'').trim():'',
-      tenure:cTenure>=0?String(row[cTenure]??'').trim():'',
-      date,score,passed,
-      memo:cMemo>=0?String(row[cMemo]??'').trim():''};
-    DB.testRecords.push(rec);
-    newRecs.push(rec);
-    added++;
-  }
-  if(!added){toast('가져올 데이터가 없습니다 (이름 열을 다시 확인해주세요)');return;}
-  TL_ROLE=role;
-  save();
-  newRecs.forEach(sbUpsertTestRecord);
-  TL_IMPORT=null;
-  closeModal();render();
-  toast(`${added}건 가져왔습니다${skipped?` (이름 없는 ${skipped}행 제외)`:''}`);
-}
 
 function vSettings(){
   return `<div class="grid g2">
