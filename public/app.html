@@ -3355,6 +3355,10 @@ function tlSortVal(r,key){
   if(s)return s.score===''||s.score==null?-Infinity:+s.score;
   return '';
 }
+function tlAvgOf(list,getter){
+  const nums=list.map(getter).filter(v=>v!==''&&v!=null&&!isNaN(+v)).map(v=>+v);
+  return nums.length?f1(avg(nums)):'-';
+}
 function tlCompare(a,b,key){
   const va=tlSortVal(a,key),vb=tlSortVal(b,key);
   if(typeof va==='number'&&typeof vb==='number')return va-vb;
@@ -3533,6 +3537,21 @@ function vTestLog(){
             <button class="btn sm ghost" style="padding:3px 6px" onclick="deleteTestRecord('${r.id}')">🗑</button>
           </td>
         </tr>`;}).join('')}</tbody>
+        <tfoot><tr style="background:var(--bg2,rgba(127,127,127,.08));font-weight:800">
+          ${colsBefore.map(c=>{
+            if(c.key==='score'||c.key==='percent')return `<td style="text-align:center">${tlAvgOf(rows,r=>r[c.key])}</td>`;
+            if(c.key==='passed'){const p=rows.filter(r=>r.passed).length;return `<td style="text-align:center;color:var(--green)">${rows.length?pct(p/rows.length*100):'-'}</td>`;}
+            return '<td></td>';
+          }).join('')}
+          <td style="white-space:nowrap">평균</td>
+          ${colsAfter.map(c=>{
+            if(c.key==='score'||c.key==='percent')return `<td style="text-align:center">${tlAvgOf(rows,r=>r[c.key])}</td>`;
+            if(c.key==='passed'){const p=rows.filter(r=>r.passed).length;return `<td style="text-align:center;color:var(--green)">${rows.length?pct(p/rows.length*100):'-'}</td>`;}
+            return '<td></td>';
+          }).join('')}
+          ${subjNames.map(sn=>`<td style="text-align:center">${tlAvgOf(rows,r=>{const s=(r.subjects||[]).find(x=>x.name===sn);return s?s.score:'';})}</td>`).join('')}
+          <td></td>
+        </tr></tfoot>
       </table></div>
     </div>`;
 
