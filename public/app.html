@@ -427,8 +427,8 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 function respOf(tid){return DB.responses.filter(r=>r.trainingId===tid);}
 function lectOf(t,lid){return t.lectures.find(l=>l.id===lid);}
 function lectLabel(t,L){const ins=byId(DB.instructors,L.instructorId);const nm=ins?ins.name:(L.instructorName||'');return nm?`${L.title} - ${nm}`:L.title;}
-// 설문 포함 여부: surveyOff가 명시적으로 지정되면 그 값을 우선하고, 아니면 테스트(isTest) 과목은 기본 제외
-function lectSurveyOn(L){if(typeof L.surveyOff==='boolean')return !L.surveyOff;return !L.isTest;}
+// 설문 포함 여부: '설문제외' 체크박스(isTest)를 체크한 과목만 설문에서 빠짐 — 그 외 자동/키워드 판별 없음
+function lectSurveyOn(L){return !L.isTest;}
 // 설문 대상 후보 강의: 첫/마지막(개회·수료)·점심식사·가치공유 제외 + 동일강사 중복 제거 (설문 on/off와 무관하게 전체 후보를 반환)
 function survCandidates(t){
   const seen=new Set();
@@ -446,13 +446,13 @@ function surveyLectures(t){
   const extra=(t.surveyExtra||[]).map(e=>({id:e.id,title:e.title,instructorId:'',instructorName:'',field:'',isExtra:true}));
   return survCandidates(t).filter(lectSurveyOn).concat(extra);
 }
-// 설문 항목 on/off 토글 (삭제 대신 소프트 제외 — 실제 교육일정에는 영향 없음)
+// 설문제외 체크박스 토글 (실제 교육일정에는 영향 없음, 설문에서만 빠짐)
 function toggleSurveyLect(tid,lid){
   const t=byId(DB.trainings,tid);if(!t)return;
   const L=lectOf(t,lid);if(!L)return;
-  L.surveyOff=lectSurveyOn(L); // 켜져있으면 끄고, 꺼져있으면 켠다
+  L.isTest=!L.isTest;
   save();sbUpsert('trainings',{id:tid,lectures:t.lectures});
-  toast(lectSurveyOn(L)?'설문에 포함했습니다':'설문에서 제외했습니다');
+  toast(L.isTest?'설문에서 제외했습니다':'설문에 포함했습니다');
   rerender();
 }
 function addSurveyExtra(tid){
@@ -1240,7 +1240,7 @@ async function saveEditTraining(tid){
     }
     // 강사 field 업데이트
     if(iid&&L.field){const ins=byId(DB.instructors,iid);if(ins&&!ins.field)ins.field=L.field;}
-    return {id:L.id||'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||'',isTest:!!L.isTest,surveyOff:L.surveyOff};
+    return {id:L.id||'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||'',isTest:!!L.isTest};
   });
   t.name=name;t.date=date;t.round=+$('#fRound').value||1;
   t.type=$('#fType').value;t.place=$('#fPlace').value.trim()||'미정';
@@ -1893,7 +1893,6 @@ function renderSurveyManageList(t){
         <span style="font-weight:700;${on?'':'color:var(--ink4);text-decoration:line-through'}">${esc(L.title)}</span>
         <span class="card-sub">${esc(L.instructorName||ins?.name||'')}</span>
         ${L.isTest?'<span class="badge amber">설문제외</span>':''}
-        ${!on?'<span class="badge gray">설문 제외</span>':''}
       </label>
     </div>`;
   }).join('');
