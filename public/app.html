@@ -432,11 +432,9 @@ function lectLabel(t,L){const ins=byId(DB.instructors,L.instructorId);const nm=i
 function lectSurveyOn(L){return !L.isTest;}
 // 설문 대상 후보 강의: 첫/마지막(개회·수료)·점심식사·가치공유 제외 + 동일강사 중복 제거 (설문 on/off와 무관하게 전체 후보를 반환)
 function survCandidates(t){
-  return t.lectures.filter((L,i,arr)=>{
-    if(i===0||i===arr.length-1)return false;
-    if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
-    return true;
-  });
+  // 자동 제외 없음 — 첫/마지막, 점심식사/가치공유, 동일강사 등 어떤 조건도 자동으로 걸러내지 않음.
+  // 오직 각 강의의 '설문제외' 체크박스(isTest)만으로 설문 포함 여부가 결정됨 (surveyLectures 참고).
+  return t.lectures.slice();
 }
 // 실제 설문에 노출될 문항: 후보 중 설문 on 인 것 + 관리자가 추가한 커스텀 문항
 function surveyLectures(t){
