@@ -3318,11 +3318,31 @@ const TL_FIXED_COLS=[
   {key:'percent',label:'백분율',thStyle:'text-align:center;min-width:64px',
     cell:r=>`<td><input class="input num" style="padding:4px 6px;font-size:.78rem;width:56px;text-align:center" value="${r.percent===''||r.percent==null?'':esc(String(r.percent))}" onchange="updateTestField('${r.id}','percent',this.value)"></td>`},
   {key:'passed',label:'통과여부',thStyle:'text-align:center;min-width:90px',
-    cell:r=>`<td><select class="select" style="padding:4px 6px;font-size:.78rem" onchange="updateTestField('${r.id}','passed',this.value)">
+    cell:r=>`<td style="${r.passed?'background:rgba(16,153,90,.12)':''}"><select class="select" style="padding:4px 6px;font-size:.78rem;font-weight:${r.passed?800:500};color:${r.passed?'var(--green,#10995a)':'inherit'}" onchange="updateTestField('${r.id}','passed',this.value)">
       <option value="1" ${r.passed?'selected':''}>합격</option><option value="0" ${!r.passed?'selected':''}>불합격</option></select></td>`},
   {key:'memo',label:'비고',thStyle:'min-width:140px',
     cell:r=>`<td><input class="input" style="padding:4px 6px;font-size:.78rem" placeholder="비고" value="${esc(r.memo||'')}" onchange="updateTestField('${r.id}','memo',this.value)"></td>`},
 ];
+let TL_SORT={key:null,dir:1}; // 열 제목 클릭 시 오름/내림차순 정렬 상태
+function sortTestCol(key){
+  if(TL_SORT.key===key){TL_SORT.dir*=-1;}else{TL_SORT.key=key;TL_SORT.dir=1;}
+  render();
+}
+function tlSortArrow(key){return TL_SORT.key===key?(TL_SORT.dir===1?' ▲':' ▼'):'';}
+function tlSortVal(r,key){
+  if(key==='person')return r.person||'';
+  if(key==='passed')return r.passed?1:0;
+  if(key==='score'||key==='percent'){const v=r[key];return v===''||v==null?-Infinity:+v;}
+  if(key==='store'||key==='empNo'||key==='tenure'||key==='date'||key==='memo')return r[key]||'';
+  const s=(r.subjects||[]).find(x=>x.name===key);
+  if(s)return s.score===''||s.score==null?-Infinity:+s.score;
+  return '';
+}
+function tlCompare(a,b,key){
+  const va=tlSortVal(a,key),vb=tlSortVal(b,key);
+  if(typeof va==='number'&&typeof vb==='number')return va-vb;
+  return String(va).localeCompare(String(vb),'ko');
+}
 function tlHiddenCols(role){return (DB.testHiddenCols&&DB.testHiddenCols[role])||[];}
 function toggleTestCol(role,key){
   DB.testHiddenCols=DB.testHiddenCols||{};
@@ -3331,6 +3351,31 @@ function toggleTestCol(role,key){
   const idx=arr.indexOf(key);
   if(idx>=0)arr.splice(idx,1);else arr.push(key);
   save();render();
+}
+
+// 검색창은 입력할 때마다 화면 전체를 다시 그리면 한글 조합 중 입력창이 통째로 교체되어
+// 커서가 사라지거나 한글이 자모로 쪼개지는 문제가 있어, 한글 조합이 끝난 뒤/타이핑이 잠시 멈췄을 때만
+// 다시 그리고, 다시 그린 뒤에는 포커스와 커서 위치를 그대로 복원한다.
+let _tlComposing=false,_tlSearchTimer=null;
+function tlSearchInput(val){
+  TL_Q=val;
+  if(_tlComposing)return;
+  clearTimeout(_tlSearchTimer);
+  _tlSearchTimer=setTimeout(rerenderKeepFocus,250);
+}
+function rerenderKeepFocus(){
+  const el=document.activeElement;
+  const id=el&&el.id;
+  const selStart=el&&typeof el.selectionStart==='number'?el.selectionStart:null;
+  const selEnd=el&&typeof el.selectionEnd==='number'?el.selectionEnd:null;
+  render();
+  if(id){
+    const again=document.getElementById(id);
+    if(again){
+      again.focus();
+      if(selStart!=null&&again.setSelectionRange){try{again.setSelectionRange(selStart,selEnd);}catch(e){}}
+    }
+  }
 }
 
 function vTestLog(){
@@ -3352,7 +3397,10 @@ function vTestLog(){
       return `<button class="btn ${on?'primary':''} sm" onclick="TL_ROLE='${r}';rerender()">${esc(r)} <span style="opacity:.8">${cnt}</span></button>`;
     }).join('')}
     <span style="margin-left:auto"></span>
-    <input class="input" style="max-width:220px" placeholder="테스트명·이름·사번·점포 검색" value="${esc(TL_Q)}" oninput="TL_Q=this.value;rerender()">
+    <input class="input" id="tlSearchBox" style="max-width:220px" placeholder="테스트명·이름·사번·점포 검색" value="${esc(TL_Q)}"
+      oninput="tlSearchInput(this.value)"
+      oncompositionstart="_tlComposing=true"
+      oncompositionend="_tlComposing=false;tlSearchInput(this.value)">
     <button class="btn primary sm" onclick="${TL_INLINE_OPEN?'closeTlInline()':'openTlInline()'}">${TL_INLINE_OPEN?'✕ 입력 닫기':'＋ 테스트 결과 추가'}</button>
   </div>`;
 
@@ -3392,7 +3440,7 @@ function vTestLog(){
   const colsAfter=visCols.filter(c=>c.key!=='store');
 
   const groups=names.map(name=>{
-    const rows=byName[name].slice().sort((a,b)=>a.date<b.date?1:-1);
+    const rows=byName[name].slice().sort((a,b)=>TL_SORT.key?tlCompare(a,b,TL_SORT.key)*TL_SORT.dir:(a.date<b.date?1:-1));
     const n=rows.length,p=rows.filter(r=>r.passed).length;
     const avgS=avg(rows.map(r=>+r.score||0));
     // 이 테스트명 안에서 실제로 쓰인 과목들을 등장 순서대로 합침 (과목 수가 기록마다 다를 수 있음)
@@ -3414,10 +3462,10 @@ function vTestLog(){
       <div class="card-sub" style="padding:0 22px 8px">값은 표에서 바로 클릭해서 수정할 수 있고, 열 제목 옆 ✕로 필요 없는 열을 숨길 수 있어요.</div>
       <div style="overflow-x:auto"><table class="tbl">
         <thead><tr>
-          ${colsBefore.map(c=>`<th style="${c.thStyle||''}">${esc(c.label.trim())} <span style="cursor:pointer;color:var(--ink4)" title="'${esc(c.label.trim())}' 열 숨기기" onclick="toggleTestCol('${TL_ROLE}','${c.key}')">✕</span></th>`).join('')}
-          <th>성명</th>
-          ${colsAfter.map(c=>`<th style="${c.thStyle||''}">${esc(c.label.trim())} <span style="cursor:pointer;color:var(--ink4)" title="'${esc(c.label.trim())}' 열 숨기기" onclick="toggleTestCol('${TL_ROLE}','${c.key}')">✕</span></th>`).join('')}
-          ${subjNames.map(sn=>`<th style="text-align:center;min-width:64px">${esc(sn)} <span style="cursor:pointer;color:var(--ink4)" title="'${esc(sn)}' 과목 삭제" onclick="removeGroupSubject('${TL_ROLE}',${nameArg},${JSON.stringify(sn).replace(/"/g,'&quot;')})">✕</span></th>`).join('')}
+          ${colsBefore.map(c=>`<th style="${c.thStyle||''}"><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol('${c.key}')">${esc(c.label.trim())}${tlSortArrow(c.key)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(c.label.trim())}' 열 숨기기" onclick="toggleTestCol('${TL_ROLE}','${c.key}')">✕</span></th>`).join('')}
+          <th><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol('person')">성명${tlSortArrow('person')}</span></th>
+          ${colsAfter.map(c=>`<th style="${c.thStyle||''}"><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol('${c.key}')">${esc(c.label.trim())}${tlSortArrow(c.key)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(c.label.trim())}' 열 숨기기" onclick="toggleTestCol('${TL_ROLE}','${c.key}')">✕</span></th>`).join('')}
+          ${subjNames.map(sn=>{const sArg=JSON.stringify(sn).replace(/"/g,'&quot;');return `<th style="text-align:center;min-width:64px"><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol(${sArg})">${esc(sn)}${tlSortArrow(sn)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(sn)}' 과목 삭제" onclick="removeGroupSubject('${TL_ROLE}',${nameArg},${sArg})">✕</span></th>`;}).join('')}
           <th></th>
         </tr></thead>
         <tbody>${rows.map(r=>{
@@ -3649,18 +3697,31 @@ function applyTestPaste(){
   const lines=text.split(/\r?\n/).filter(l=>l.trim().length);
   if(!lines.length){toast('붙여넣을 내용이 없습니다');return;}
   const sep=lines[0].includes('\t')?'\t':',';
-  const header=lines[0].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim());
+  // 엑셀에서 표를 복사하면 맨 끝에 의도치 않은 빈 열이 함께 붙는 경우가 있어, 헤더 끝의 빈 칸은 잘라낸다
+  const trimTrailingEmpty=arr=>{const a=arr.slice();while(a.length&&a[a.length-1]==='')a.pop();return a;};
+  const header=trimTrailingEmpty(lines[0].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim()));
   if(header.length<7){toast('열 개수를 확인해주세요 (팀·성명·사번·근속년수·총점수·과목...·백분율·통과여부 순서)');return;}
-  const subjects=header.slice(5,header.length-2);
+
+  // 마지막 두 열은 원래 백분율·통과여부이지만, 혹시 이름이 붙어있으면 이름으로도 한 번 더 확인해서
+  // 백분율/통과여부 열이 과목으로 잘못 인식되지 않도록 한다
+  let percentIdx=header.length-2, passIdx=header.length-1;
+  const percentByName=header.map((h,i)=>({h,i})).filter(x=>/백분율|퍼센트/.test(x.h));
+  const passByName=header.map((h,i)=>({h,i})).filter(x=>/통과|합격.?여부/.test(x.h));
+  if(percentByName.length)percentIdx=percentByName[percentByName.length-1].i;
+  if(passByName.length)passIdx=passByName[passByName.length-1].i;
+  const subjEnd=Math.min(percentIdx,passIdx);
+  const subjects=header.slice(5,subjEnd>5?subjEnd:header.length-2);
+
   const rows=[];
   for(let i=1;i<lines.length;i++){
-    const cols=lines[i].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim());
+    let cols=lines[i].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim());
+    cols=cols.slice(0,header.length); // 헤더 길이에 맞춰 자름 — 빈 열이 더 붙어와도 정렬이 어긋나지 않도록
     const person=cols[1]||'';
     if(!person)continue;
     const total=cols[4]??'';
-    const passRaw=tlNormPass(cols[header.length-1]);
+    const passRaw=tlNormPass(cols[passIdx]);
     rows.push({team:cols[0]||'',person,empNo:cols[2]||'',tenure:cols[3]||'',total,
-      scores:subjects.map((_,si)=>cols[5+si]??''),percent:cols[header.length-2]??'',
+      scores:subjects.map((_,si)=>cols[5+si]??''),percent:cols[percentIdx]??'',
       passed:passRaw===null?true:passRaw});
   }
   if(!rows.length){toast('인식된 행이 없습니다 — 첫 줄(헤더)을 포함해 붙여넣었는지 확인해주세요');return;}
