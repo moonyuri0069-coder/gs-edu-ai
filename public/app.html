@@ -293,6 +293,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 </head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <body>
 <div id="app"></div>
 <div class="toast" id="toast"></div>
@@ -413,6 +414,8 @@ function load(){
     DB={trainings:[],instructors:[],responses:[],ai:{},theme:'light'};
   }
   DB.deletedResponseIds=DB.deletedResponseIds||[]; // 관리자가 삭제한 응답 id (서버 삭제가 막혀 있어도 새로고침 시 되살아나지 않도록)
+  DB.testRecords=DB.testRecords||[]; // 테스트 이력관리 (직책별 테스트 합격/점수)
+  DB.deletedTestRecordIds=DB.deletedTestRecordIds||[]; // 삭제한 테스트 이력 id (서버 삭제 실패 시 재등장 방지)
   save();
 }
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(DB));}catch(e){}}
@@ -694,6 +697,7 @@ const MENUS=[['dash','Dashboard','M3 13h6V3H3v10zm0 8h6v-6H3v6zm8 0h10V11H11v10z
  ['report','결과보고서','M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 7V3.5L18.5 9H13z'],
  ['guide','교육생안내','M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM5 10h9v2H5zm0-3h9v2H5zm0 6h6v2H5zm11 1l-1.4-1.4L16 11.2l-1.4-1.4L13 11.4 11.6 10 10 11.6l3 3 5-5z'],
  ['feedback','강사피드백','M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12l-3-3-3 3V4h6v10z'],
+ ['testlog','테스트 이력관리','M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-7.5 9.5l2 2 4.5-4.5'],
  ['settings','설정','M19.4 13a7.7 7.7 0 000-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 00-1.7-1l-.4-2.6h-4l-.4 2.6a7.7 7.7 0 00-1.7 1l-2.4-1-2 3.4L6.6 11a7.7 7.7 0 000 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 001.7 1l.4 2.6h4l.4-2.6a7.7 7.7 0 001.7-1l2.4 1 2-3.4-2.2-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z']];
 const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간'],trainings:['교육관리','교육·강의 구성 · QR/설문 URL · 응답 마감'],
  instructors:['강사관리','강사 등록 · 강사별 Dashboard'],surveys:['설문관리','설문 구성 미리보기'],
@@ -702,6 +706,7 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  report:['결과보고서','임원보고 A4 자동 생성 · PDF'],
  guide:['교육생안내','출석QR · 일정안내 · 만족도QR — 16:9 교육용 화면'],
  feedback:['강사피드백','교육 차수별 강사 피드백 작성'],
+ testlog:['테스트 이력관리','직책별 테스트 합격 여부 · 점수 관리'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
 // 세션 복구 시 1번만 Supabase 동기화
@@ -782,7 +787,7 @@ function render(){
   const parts=h.replace('#/','').split('/');
   const page=parts[0]||'dash';
   const body={dash:vDash,trainings:vTrainings,instructors:parts[1]?()=>vInstructorDetail(parts[1]):vInstructors,
-    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,settings:vSettings}[page]||vDash;
+    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,testlog:vTestLog,settings:vSettings}[page]||vDash;
   const [title,sub]=PAGE_META[page]||PAGE_META.dash;
   $('#app').innerHTML=`
   <div class="layout">
@@ -919,6 +924,8 @@ async function syncFromSupabase(){
         }
       });
     }
+    // 테스트 이력관리 동기화 (test_records 테이블이 없으면 조용히 건너뜀)
+    await syncTestRecords();
     save();
     _syncing=false;
     console.log('동기화 완료');
@@ -3285,6 +3292,370 @@ function resetFBOpinions(tid,instr){
   if(!t.feedback)t.feedback={};
   if(t.feedback[instr])t.feedback[instr]._loaded=false;
   save(); render();
+}
+
+/* ═══════════ 테스트 이력관리 ═══════════ */
+const TESTLOG_ROLES=['점장','부점장','OFC','개점지원담당'];
+let TL_ROLE=TESTLOG_ROLES[0];
+let TL_Q='';
+let TL_DRAFT=null; // 추가/수정 모달 draft
+let TL_IMPORT=null; // 엑셀/CSV 업로드 매핑 draft
+
+function vTestLog(){
+  DB.testRecords=DB.testRecords||[];
+  if(!TESTLOG_ROLES.includes(TL_ROLE))TL_ROLE=TESTLOG_ROLES[0];
+
+  const roleRecords=DB.testRecords.filter(r=>r.role===TL_ROLE);
+  const q=(TL_Q||'').trim();
+  const filtered=q?roleRecords.filter(r=>(r.testName||'').includes(q)||(r.person||'').includes(q)||(r.store||'').includes(q)||(r.empNo||'').includes(q)):roleRecords;
+
+  const totalN=filtered.length;
+  const passN=filtered.filter(r=>r.passed).length;
+  const avgScore=totalN?avg(filtered.map(r=>+r.score||0)):0;
+
+  const tabs=`<div class="row" style="gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    ${TESTLOG_ROLES.map(r=>{
+      const cnt=DB.testRecords.filter(x=>x.role===r).length;
+      const on=TL_ROLE===r;
+      return `<button class="btn ${on?'primary':''} sm" onclick="TL_ROLE='${r}';rerender()">${esc(r)} <span style="opacity:.8">${cnt}</span></button>`;
+    }).join('')}
+    <span style="margin-left:auto"></span>
+    <input class="input" style="max-width:220px" placeholder="테스트명·이름·사번·점포 검색" value="${esc(TL_Q)}" oninput="TL_Q=this.value;rerender()">
+    <label class="btn sm" style="cursor:pointer;margin:0">📂 엑셀/CSV 업로드
+      <input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleTestUpload(event)"></label>
+    <button class="btn primary sm" onclick="openTestModal()">＋ 테스트 결과 추가</button>
+  </div>`;
+
+  const summary=`<div class="grid g3" style="margin-bottom:14px">
+    ${kpi('응시 인원',totalN,'명','', 'flat')}
+    ${kpi('합격률',totalN?Math.round(passN/totalN*100):'-',totalN?'%':'',totalN?`${passN}/${totalN}명 합격`:'응시 기록 없음','up')}
+    ${kpi('평균 점수',totalN?f1(avgScore):'-',totalN?'점':'','','up')}
+  </div>`;
+
+  if(!totalN){
+    return tabs+summary+'<div class="empty">등록된 테스트 이력이 없습니다. "＋ 테스트 결과 추가" 또는 "📂 엑셀/CSV 업로드"로 등록해주세요.</div>';
+  }
+
+  // 테스트명별로 그룹핑
+  const byName={};
+  filtered.forEach(r=>{
+    const key=r.testName||'(이름 없음)';
+    if(!byName[key])byName[key]=[];
+    byName[key].push(r);
+  });
+  const names=Object.keys(byName).sort((a,b)=>{
+    const la=byName[a].slice().sort((x,y)=>x.date<y.date?1:-1)[0]?.date||'';
+    const lb=byName[b].slice().sort((x,y)=>x.date<y.date?1:-1)[0]?.date||'';
+    return la<lb?1:la>lb?-1:0;
+  });
+
+  const groups=names.map(name=>{
+    const rows=byName[name].slice().sort((a,b)=>a.date<b.date?1:-1);
+    const n=rows.length,p=rows.filter(r=>r.passed).length;
+    const avgS=avg(rows.map(r=>+r.score||0));
+    return `<div class="card" style="margin-bottom:14px">
+      <div class="card-pad" style="border-bottom:1px solid var(--border)">
+        <div class="spread">
+          <div class="card-title">${esc(name)}</div>
+          <div class="row" style="gap:14px;font-size:.85rem;color:var(--ink2)">
+            <span>응시 <b class="num">${n}</b>명</span>
+            <span>합격률 <b class="num" style="color:var(--green)">${pct(n?p/n*100:0)}</b></span>
+            <span>평균 <b class="num">${f1(avgS)}</b>점</span>
+          </div>
+        </div>
+      </div>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>응시자</th><th>사번</th><th>점포/직무</th><th>근속</th><th>응시일</th><th style="text-align:center">점수</th><th style="text-align:center">결과</th><th>비고</th><th></th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td style="font-weight:700">${esc(r.person||'-')}</td>
+          <td class="num">${esc(r.empNo||'-')}</td>
+          <td>${esc(r.store||'-')}</td>
+          <td>${esc(r.tenure||'-')}</td>
+          <td class="num">${esc(r.date||'-')}</td>
+          <td class="num" style="text-align:center">${r.score===''||r.score==null?'-':esc(String(r.score))}</td>
+          <td style="text-align:center"><span class="badge ${r.passed?'green':'red'}">${r.passed?'합격':'불합격'}</span></td>
+          <td style="color:var(--ink3);font-size:.82rem">${esc(r.memo||'')}</td>
+          <td style="white-space:nowrap">
+            <button class="btn sm ghost" style="padding:3px 6px" onclick="openTestModal('${r.id}')">✎</button>
+            <button class="btn sm ghost" style="padding:3px 6px" onclick="deleteTestRecord('${r.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }).join('');
+
+  return tabs+summary+groups;
+}
+
+function openTestModal(id){
+  const editing=id?DB.testRecords.find(r=>r.id===id):null;
+  TL_DRAFT=editing?{...editing}:{id:'',role:TL_ROLE,testName:'',person:'',empNo:'',store:'',tenure:'',date:new Date().toISOString().slice(0,10),score:'',passed:true,memo:''};
+  const existingNames=[...new Set(DB.testRecords.filter(r=>r.role===TL_DRAFT.role).map(r=>r.testName).filter(Boolean))];
+  openModal(editing?'테스트 결과 수정':'테스트 결과 추가',`
+   <div class="fld-group"><label class="fld">직책 *</label>
+    <select class="select" id="tlRole">${TESTLOG_ROLES.map(r=>`<option ${TL_DRAFT.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
+   <div class="fld-group"><label class="fld">테스트명 *</label>
+    <input class="input" id="tlName" list="tlNameList" placeholder="예) 26년 상반기 OFC테스트" value="${esc(TL_DRAFT.testName)}">
+    <datalist id="tlNameList">${existingNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">응시자 *</label><input class="input" id="tlPerson" placeholder="성명" value="${esc(TL_DRAFT.person)}"></div>
+    <div class="fld-group"><label class="fld">사번</label><input class="input" id="tlEmpNo" placeholder="사번" value="${esc(TL_DRAFT.empNo||'')}"></div>
+   </div>
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">점포/직무</label><input class="input" id="tlStore" placeholder="점포명 또는 팀/직무" value="${esc(TL_DRAFT.store)}"></div>
+    <div class="fld-group"><label class="fld">근속</label><input class="input" id="tlTenure" placeholder="예) 2년 3개월" value="${esc(TL_DRAFT.tenure||'')}"></div>
+   </div>
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">응시일</label><input class="input" id="tlDate" type="date" value="${TL_DRAFT.date}"></div>
+    <div class="fld-group"><label class="fld">점수</label><input class="input num" id="tlScore" type="number" min="0" max="100" placeholder="0~100" value="${esc(TL_DRAFT.score)}"></div>
+   </div>
+   <div class="fld-group"><label class="fld">결과</label>
+    <div class="row" style="gap:14px">
+     <label class="row" style="gap:6px;cursor:pointer"><input type="radio" name="tlPassed" value="1" ${TL_DRAFT.passed?'checked':''}>합격</label>
+     <label class="row" style="gap:6px;cursor:pointer"><input type="radio" name="tlPassed" value="0" ${!TL_DRAFT.passed?'checked':''}>불합격</label>
+    </div></div>
+   <div class="fld-group"><label class="fld">비고</label><textarea class="input" id="tlMemo" rows="2">${esc(TL_DRAFT.memo||'')}</textarea></div>
+  `,`<button class="btn" onclick="closeModal()">취소</button>
+   <button class="btn primary" onclick="saveTestRecord('${editing?editing.id:''}')">저장</button>`);
+}
+
+function saveTestRecord(id){
+  const role=$('#tlRole').value;
+  const testName=$('#tlName').value.trim();
+  const person=$('#tlPerson').value.trim();
+  const empNo=$('#tlEmpNo').value.trim();
+  const store=$('#tlStore').value.trim();
+  const tenure=$('#tlTenure').value.trim();
+  const date=$('#tlDate').value||new Date().toISOString().slice(0,10);
+  const scoreRaw=$('#tlScore').value;
+  const score=scoreRaw===''?'':Math.max(0,Math.min(100,+scoreRaw||0));
+  const passed=document.querySelector('input[name="tlPassed"]:checked')?.value==='1';
+  const memo=$('#tlMemo').value.trim();
+  if(!testName||!person){toast('테스트명과 응시자를 입력해주세요');return;}
+  DB.testRecords=DB.testRecords||[];
+  let rec;
+  if(id){
+    rec=DB.testRecords.find(x=>x.id===id);
+    if(rec)Object.assign(rec,{role,testName,person,empNo,store,tenure,date,score,passed,memo});
+  }else{
+    rec={id:'tl'+Date.now(),role,testName,person,empNo,store,tenure,date,score,passed,memo};
+    DB.testRecords.push(rec);
+  }
+  TL_ROLE=role;
+  save();
+  if(rec)sbUpsertTestRecord(rec);
+  closeModal();render();
+  toast(id?'테스트 결과가 수정되었습니다':'테스트 결과가 등록되었습니다');
+}
+
+function deleteTestRecord(id){
+  if(!confirm('이 테스트 결과를 삭제하시겠습니까?'))return;
+  DB.testRecords=(DB.testRecords||[]).filter(r=>r.id!==id);
+  DB.deletedTestRecordIds=DB.deletedTestRecordIds||[];
+  if(!DB.deletedTestRecordIds.includes(id))DB.deletedTestRecordIds.push(id);
+  save();render();
+  sbDeleteTestRecord(id);
+  toast('테스트 결과가 삭제되었습니다');
+}
+
+/* ── Supabase 연동 (공유를 위해 test_records 테이블 사용 — 사전에 테이블 생성 필요) ── */
+function sbUpsertTestRecord(r){
+  sbUpsert('test_records',{id:r.id,role:r.role,test_name:r.testName,person:r.person,emp_no:r.empNo||'',
+    store:r.store||'',tenure:r.tenure||'',date:r.date||'',score:r.score===''?null:r.score,passed:!!r.passed,memo:r.memo||''});
+}
+async function sbDeleteTestRecord(id){
+  try{
+    await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/test_records?id=eq.'+id,{
+      method:'DELETE',
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+  }catch(e){console.warn('테스트 결과 삭제(서버) 오류:',e);}
+}
+async function syncTestRecords(){
+  try{
+    const rr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/test_records?select=*',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    if(!rr.ok)return; // test_records 테이블이 없으면 조용히 건너뜀
+    const rows=await rr.json();
+    if(!rows||!rows.length)return;
+    DB.testRecords=DB.testRecords||[];
+    const delSet=new Set(DB.deletedTestRecordIds||[]);
+    rows.forEach(row=>{
+      if(delSet.has(row.id))return;
+      if(DB.testRecords.find(x=>x.id===row.id))return;
+      DB.testRecords.push({id:row.id,role:row.role,testName:row.test_name,person:row.person,empNo:row.emp_no||'',
+        store:row.store||'',tenure:row.tenure||'',date:row.date||'',score:row.score===null?'':row.score,passed:!!row.passed,memo:row.memo||''});
+    });
+    save();
+  }catch(e){console.warn('테스트 이력 동기화 오류:',e);}
+}
+
+/* ── 엑셀/CSV 업로드: 헤더 자동 인식 + 열 매핑 ── */
+const TL_HEADER_HINTS={
+  name:/이름|성명/,empNo:/사번/,store:/팀|직무(?!근속)|점포/,tenure:/근속/,
+  score:/점수/,pass:/pass/i,memo:/비고/
+};
+function tlDetectHeaderRow(rows){
+  let best=0,bestScore=-1;
+  for(let i=0;i<Math.min(6,rows.length);i++){
+    const cells=(rows[i]||[]).map(c=>String(c??''));
+    let s=0;
+    if(cells.some(c=>TL_HEADER_HINTS.name.test(c)))s++;
+    if(cells.some(c=>TL_HEADER_HINTS.empNo.test(c)))s++;
+    if(cells.some(c=>TL_HEADER_HINTS.score.test(c)))s++;
+    if(cells.some(c=>TL_HEADER_HINTS.store.test(c)))s++;
+    if(cells.some(c=>TL_HEADER_HINTS.tenure.test(c)))s++;
+    if(s>bestScore){bestScore=s;best=i;}
+  }
+  return bestScore>=2?best:0;
+}
+function tlGuessCol(headerRow,type){
+  const cells=headerRow.map(c=>String(c??'').trim());
+  if(type==='score'){
+    // 정확히 '점수'/'총점수'/'총 점수' 우선, '지난'(이전 차수) 포함 열은 제외
+    let idx=cells.findIndex(c=>/^(점수|총점수|총\s*점수)$/.test(c));
+    if(idx<0)idx=cells.findIndex(c=>TL_HEADER_HINTS.score.test(c)&&!/지난|이전|평균|比/.test(c));
+    if(idx<0)idx=cells.findIndex(c=>TL_HEADER_HINTS.score.test(c));
+    return idx;
+  }
+  return cells.findIndex(c=>TL_HEADER_HINTS[type].test(c));
+}
+function handleTestUpload(e){
+  const file=e.target.files[0];
+  if(!file)return;
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    let sheets={};
+    if(ext==='csv'){
+      const text=String(ev.target.result||'');
+      const lines=text.split(/\r?\n/).filter(l=>l.length);
+      const sep=lines[0]&&lines[0].includes('\t')?'\t':',';
+      const rows=lines.map(l=>l.split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim()));
+      sheets={'CSV':rows};
+    }else{
+      if(typeof XLSX==='undefined'){toast('엑셀 파싱 라이브러리를 불러오지 못했습니다 — CSV 파일로 업로드해주세요');return;}
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      wb.SheetNames.forEach(name=>{
+        sheets[name]=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:'',raw:false});
+      });
+    }
+    const sheetNames=Object.keys(sheets);
+    if(!sheetNames.length){toast('파일에서 데이터를 찾을 수 없습니다');return;}
+    TL_IMPORT={sheets,sheetNames,activeSheet:sheetNames[0],role:TL_ROLE,testName:'',
+      date:new Date().toISOString().slice(0,10),passThreshold:60};
+    openImportMappingModal();
+  };
+  if(ext==='csv')reader.readAsText(file,'utf-8');else reader.readAsArrayBuffer(file);
+  e.target.value=''; // 같은 파일 재업로드 허용
+}
+function openImportMappingModal(){
+  const rows=TL_IMPORT.sheets[TL_IMPORT.activeSheet]||[];
+  const headerIdx=tlDetectHeaderRow(rows);
+  const headerRow=rows[headerIdx]||[];
+  const colOpts=(sel)=>{
+    let out=`<option value="-1" ${sel===-1?'selected':''}>(사용 안함)</option>`;
+    headerRow.forEach((h,i)=>{
+      const label=String(h??'').replace(/\n/g,' ').trim()||`(빈 헤더 열 ${i+1})`;
+      out+=`<option value="${i}" ${sel===i?'selected':''}>열${i+1}: ${esc(label.slice(0,24))}</option>`;
+    });
+    return out;
+  };
+  const guess={
+    name:tlGuessCol(headerRow,'name'),empNo:tlGuessCol(headerRow,'empNo'),
+    store:tlGuessCol(headerRow,'store'),tenure:tlGuessCol(headerRow,'tenure'),
+    score:tlGuessCol(headerRow,'score'),pass:tlGuessCol(headerRow,'pass'),memo:tlGuessCol(headerRow,'memo')
+  };
+  const previewRows=rows.slice(headerIdx+1,headerIdx+4).filter(r=>r.some(c=>String(c??'').trim()));
+  openModal('엑셀/CSV 업로드 — 열 매핑',`
+   ${TL_IMPORT.sheetNames.length>1?`<div class="fld-group"><label class="fld">시트 선택</label>
+    <select class="select" onchange="TL_IMPORT.activeSheet=this.value;openImportMappingModal()">
+      ${TL_IMPORT.sheetNames.map(n=>`<option value="${esc(n)}" ${TL_IMPORT.activeSheet===n?'selected':''}>${esc(n)}</option>`).join('')}
+    </select></div>`:''}
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">직책 *</label>
+     <select class="select" id="tiRole">${TESTLOG_ROLES.map(r=>`<option ${TL_IMPORT.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
+    <div class="fld-group"><label class="fld">응시일 (전체 적용)</label><input class="input" id="tiDate" type="date" value="${TL_IMPORT.date}"></div>
+   </div>
+   <div class="fld-group"><label class="fld">테스트명 * <span style="font-weight:400;color:var(--ink3)">— 업로드되는 모든 행에 동일하게 적용됩니다</span></label>
+    <input class="input" id="tiName" placeholder="예) 26년 상반기 OFC테스트" value="${esc(TL_IMPORT.testName||TL_IMPORT.activeSheet)}"></div>
+   <div class="divider"></div>
+   <div class="card-sub" style="margin-bottom:8px">헤더 행: ${headerIdx+1}번째 줄로 자동 인식했습니다. 아래에서 각 항목이 어느 열에 해당하는지 확인·수정해주세요.</div>
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">응시자(이름) *</label><select class="select" id="tiColName">${colOpts(guess.name)}</select></div>
+    <div class="fld-group"><label class="fld">사번</label><select class="select" id="tiColEmpNo">${colOpts(guess.empNo)}</select></div>
+   </div>
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">점포/팀/직무</label><select class="select" id="tiColStore">${colOpts(guess.store)}</select></div>
+    <div class="fld-group"><label class="fld">근속</label><select class="select" id="tiColTenure">${colOpts(guess.tenure)}</select></div>
+   </div>
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">점수 *</label><select class="select" id="tiColScore">${colOpts(guess.score)}</select></div>
+    <div class="fld-group"><label class="fld">합격여부 열 <span style="font-weight:400;color:var(--ink3)">(PASS/O·X 등)</span></label><select class="select" id="tiColPass">${colOpts(guess.pass)}</select></div>
+   </div>
+   <div class="grid g2">
+    <div class="fld-group"><label class="fld">비고</label><select class="select" id="tiColMemo">${colOpts(guess.memo)}</select></div>
+    <div class="fld-group"><label class="fld">합격 기준 점수 <span style="font-weight:400;color:var(--ink3)">(합격여부 열 없을 때만 사용)</span></label>
+     <input class="input num" id="tiThreshold" type="number" min="0" max="100" value="${TL_IMPORT.passThreshold}"></div>
+   </div>
+   ${previewRows.length?`<div class="divider"></div>
+   <div class="card-sub" style="margin-bottom:6px">미리보기 (상위 ${previewRows.length}행)</div>
+   <div style="overflow-x:auto;max-height:160px"><table class="tbl" style="font-size:.78rem">
+    <tbody>${previewRows.map(r=>`<tr>${headerRow.map((_,i)=>`<td>${esc(String(r[i]??''))}</td>`).join('')}</tr>`).join('')}</tbody>
+   </table></div>`:''}
+  `,`<button class="btn" onclick="closeModal()">취소</button>
+   <button class="btn primary" onclick="importTestRows(${headerIdx})">가져오기</button>`);
+}
+function tlNormPass(v){
+  const s=String(v??'').trim();
+  if(/^(o|pass|합격|통과|y|true|1)$/i.test(s))return true;
+  if(/^(x|fail|불합격|n|false|0)$/i.test(s))return false;
+  return null;
+}
+function importTestRows(headerIdx){
+  const rows=TL_IMPORT.sheets[TL_IMPORT.activeSheet]||[];
+  const role=$('#tiRole').value;
+  const testName=$('#tiName').value.trim();
+  const date=$('#tiDate').value||new Date().toISOString().slice(0,10);
+  const cName=+$('#tiColName').value,cEmpNo=+$('#tiColEmpNo').value,cStore=+$('#tiColStore').value,
+    cTenure=+$('#tiColTenure').value,cScore=+$('#tiColScore').value,cPass=+$('#tiColPass').value,cMemo=+$('#tiColMemo').value;
+  const threshold=+$('#tiThreshold').value||0;
+  if(!testName){toast('테스트명을 입력해주세요');return;}
+  if(cName<0||cScore<0){toast('응시자(이름)와 점수 열은 필수로 선택해주세요');return;}
+  DB.testRecords=DB.testRecords||[];
+  let added=0,skipped=0;
+  const newRecs=[];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i]||[];
+    const person=String(row[cName]??'').trim();
+    if(!person){skipped++;continue;}
+    const scoreRaw=String(row[cScore]??'').trim();
+    const score=scoreRaw===''?'':Math.max(0,Math.min(100,Math.round(parseFloat(scoreRaw))||0));
+    let passed;
+    if(cPass>=0){
+      const norm=tlNormPass(row[cPass]);
+      passed=norm===null?(score!==''&&+score>=threshold):norm;
+    }else{
+      passed=score!==''&&+score>=threshold;
+    }
+    const rec={id:'tl'+Date.now()+'_'+i,role,testName,person,
+      empNo:cEmpNo>=0?String(row[cEmpNo]??'').trim():'',
+      store:cStore>=0?String(row[cStore]??'').trim():'',
+      tenure:cTenure>=0?String(row[cTenure]??'').trim():'',
+      date,score,passed,
+      memo:cMemo>=0?String(row[cMemo]??'').trim():''};
+    DB.testRecords.push(rec);
+    newRecs.push(rec);
+    added++;
+  }
+  if(!added){toast('가져올 데이터가 없습니다 (이름 열을 다시 확인해주세요)');return;}
+  TL_ROLE=role;
+  save();
+  newRecs.forEach(sbUpsertTestRecord);
+  TL_IMPORT=null;
+  closeModal();render();
+  toast(`${added}건 가져왔습니다${skipped?` (이름 없는 ${skipped}행 제외)`:''}`);
 }
 
 function vSettings(){
