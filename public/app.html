@@ -716,8 +716,10 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  links:['링크관리','자주 쓰는 공유 링크를 탭별로 정리'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
-// 세션 복구 시 1번만 Supabase 동기화
-if(session&&!(DB.trainings||[]).length){
+// 화면을 열 때마다 Supabase와 동기화 — 이전에는 로컬에 교육 데이터가 하나도 없을 때만 동기화했는데,
+// 그러면 이미 데이터가 있는 브라우저는 다른 사람이 새로 추가한 교육/응답을 자동으로 받아오지 못해
+// 사람마다 화면에 보이는 교육 수·응답자 수·만족도가 서로 달라지는 문제가 있었음
+if(session){
   setTimeout(()=>syncFromSupabase().then(()=>render()),200);
 }
 
