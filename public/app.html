@@ -3300,6 +3300,7 @@ function resetFBOpinions(tid,instr){
 const TESTLOG_ROLES=['점장','부점장','OFC','개점지원담당'];
 let TL_ROLE=TESTLOG_ROLES[0];
 let TL_Q='';
+let TL_TEST=null; // 선택된 테스트명 — null이면 테스트 목록 화면, 값이 있으면 그 테스트의 대쉬보드+개인별 성적 화면
 let TL_BULK=null; // 추가/수정 draft: {mode,editId,role,testName,date,subjects:[],rows:[]}
 let TL_INLINE_OPEN=false; // "+ 테스트 결과 추가"를 눌렀을 때 팝업 대신 페이지 안에 표를 펼칠지 여부
 
@@ -3321,8 +3322,24 @@ const TL_FIXED_COLS=[
     cell:r=>`<td style="${r.passed?'background:rgba(16,153,90,.12)':''}"><select class="select" style="padding:4px 6px;font-size:.78rem;font-weight:${r.passed?800:500};color:${r.passed?'var(--green,#10995a)':'inherit'}" onchange="updateTestField('${r.id}','passed',this.value)">
       <option value="1" ${r.passed?'selected':''}>합격</option><option value="0" ${!r.passed?'selected':''}>불합격</option></select></td>`},
   {key:'memo',label:'비고',thStyle:'min-width:140px',
-    cell:r=>`<td><input class="input" style="padding:4px 6px;font-size:.78rem" placeholder="비고" value="${esc(r.memo||'')}" onchange="updateTestField('${r.id}','memo',this.value)"></td>`},
+    cell:r=>{
+      // 개점지원담당 탭만 비고를 정해진 선택지 중에서 고르도록 함 (다른 탭은 자유 입력 그대로)
+      if(r.role==='개점지원담당'){
+        const hi=TL_MEMO_HILITE[r.memo]||'';
+        return `<td><select class="select" style="padding:4px 6px;font-size:.78rem;font-weight:${hi?800:500};${hi}" onchange="updateTestField('${r.id}','memo',this.value)">
+          <option value="" ${!r.memo?'selected':''}>선택안함</option>
+          ${TL_MEMO_OPTS.map(o=>`<option value="${esc(o)}" ${r.memo===o?'selected':''}>${esc(o)}</option>`).join('')}
+        </select></td>`;
+      }
+      return `<td><input class="input" style="padding:4px 6px;font-size:.78rem" placeholder="비고" value="${esc(r.memo||'')}" onchange="updateTestField('${r.id}','memo',this.value)"></td>`;
+    }},
 ];
+// 개점지원담당 탭의 "비고" 선택지 — OFC대기는 파란색, 2차 불합격은 분홍색으로 강조
+const TL_MEMO_OPTS=['OFC대기','OFC발령','1차 불합격','2차 불합격'];
+const TL_MEMO_HILITE={
+  'OFC대기':'background:rgba(37,99,235,.14);color:#1d4ed8',
+  '2차 불합격':'background:rgba(219,39,119,.14);color:#be185d',
+};
 let TL_SORT={key:null,dir:1}; // 열 제목 클릭 시 오름/내림차순 정렬 상태
 function sortTestCol(key){
   if(TL_SORT.key===key){TL_SORT.dir*=-1;}else{TL_SORT.key=key;TL_SORT.dir=1;}
@@ -3383,25 +3400,84 @@ function vTestLog(){
   if(!TESTLOG_ROLES.includes(TL_ROLE))TL_ROLE=TESTLOG_ROLES[0];
 
   const roleRecords=DB.testRecords.filter(r=>r.role===TL_ROLE);
-  const q=(TL_Q||'').trim();
-  const filtered=q?roleRecords.filter(r=>(r.testName||'').includes(q)||(r.person||'').includes(q)||(r.store||'').includes(q)||(r.empNo||'').includes(q)):roleRecords;
 
-  const totalN=filtered.length;
-  const passN=filtered.filter(r=>r.passed).length;
-  const avgScore=totalN?avg(filtered.map(r=>+r.score||0)):0;
+  // 테스트명별로 그룹핑 (목록 화면·상세 화면 모두에서 사용)
+  const byName={};
+  roleRecords.forEach(r=>{
+    const key=r.testName||'(이름 없음)';
+    if(!byName[key])byName[key]=[];
+    byName[key].push(r);
+  });
+  // 각 테스트의 가장 최근 응시일 기준으로 정렬 — 최근에 진행한 테스트가 맨 위
+  const testNames=Object.keys(byName).sort((a,b)=>{
+    const la=byName[a].reduce((m,r)=>(r.date||'')>m?(r.date||''):m,'');
+    const lb=byName[b].reduce((m,r)=>(r.date||'')>m?(r.date||''):m,'');
+    return la<lb?1:la>lb?-1:0;
+  });
+  if(TL_TEST&&!testNames.includes(TL_TEST))TL_TEST=null; // 직책 전환 등으로 선택했던 테스트가 사라진 경우
 
   const tabs=`<div class="row" style="gap:6px;margin-bottom:14px;flex-wrap:wrap">
     ${TESTLOG_ROLES.map(r=>{
       const cnt=DB.testRecords.filter(x=>x.role===r).length;
       const on=TL_ROLE===r;
-      return `<button class="btn ${on?'primary':''} sm" onclick="TL_ROLE='${r}';rerender()">${esc(r)} <span style="opacity:.8">${cnt}</span></button>`;
+      return `<button class="btn ${on?'primary':''} sm" onclick="TL_ROLE='${r}';TL_TEST=null;TL_Q='';rerender()">${esc(r)} <span style="opacity:.8">${cnt}</span></button>`;
     }).join('')}
     <span style="margin-left:auto"></span>
-    <input class="input" id="tlSearchBox" style="max-width:220px" placeholder="테스트명·이름·사번·점포 검색" value="${esc(TL_Q)}"
+    <input class="input" id="tlSearchBox" style="max-width:220px" placeholder="${TL_TEST?'이름·사번·점포 검색':'테스트명 검색'}" value="${esc(TL_Q)}"
       oninput="tlSearchInput(this.value)"
       oncompositionstart="_tlComposing=true"
       oncompositionend="_tlComposing=false;tlSearchInput(this.value)">
     <button class="btn primary sm" onclick="${TL_INLINE_OPEN?'closeTlInline()':'openTlInline()'}">${TL_INLINE_OPEN?'✕ 입력 닫기':'＋ 테스트 결과 추가'}</button>
+  </div>`;
+
+  const inlinePanel=renderTlInlinePanel();
+
+  if(!roleRecords.length){
+    return tabs+inlinePanel+'<div class="empty">등록된 테스트 이력이 없습니다. "＋ 테스트 결과 추가"로 등록해주세요.</div>';
+  }
+
+  /* ── 1) 테스트를 아직 선택하지 않은 상태: 테스트명 목록만 최근 응시일순으로 보여줌 ── */
+  if(!TL_TEST){
+    const q=(TL_Q||'').trim();
+    const shown=q?testNames.filter(n=>n.includes(q)):testNames;
+    if(!shown.length){
+      return tabs+inlinePanel+'<div class="empty">검색 결과가 없습니다.</div>';
+    }
+    const list=shown.map(name=>{
+      const rows=byName[name];
+      const n=rows.length,p=rows.filter(r=>r.passed).length;
+      const avgS=avg(rows.map(r=>+r.score||0));
+      const lastDate=rows.reduce((m,r)=>(r.date||'')>m?(r.date||''):m,'');
+      const nameArg=JSON.stringify(name).replace(/"/g,'&quot;');
+      return `<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="TL_TEST=${nameArg};TL_Q='';TL_SORT={key:null,dir:1};render()">
+        <div class="card-pad spread" style="flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="card-title">${esc(name)}</div>
+            <div class="card-sub">최근 응시일 ${esc(lastDate||'-')}</div>
+          </div>
+          <div class="row" style="gap:14px;font-size:.85rem;color:var(--ink2);flex-wrap:wrap">
+            <span>응시 <b class="num">${n}</b>명</span>
+            <span>합격률 <b class="num" style="color:var(--green)">${pct(n?p/n*100:0)}</b></span>
+            <span>평균 <b class="num">${f1(avgS)}</b>점</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    return tabs+inlinePanel+list;
+  }
+
+  /* ── 2) 특정 테스트를 선택한 상태: 그 테스트만의 대쉬보드 + 개인별 성적 ── */
+  const allRows=byName[TL_TEST]||[];
+  const q=(TL_Q||'').trim();
+  const filtered=q?allRows.filter(r=>(r.person||'').includes(q)||(r.store||'').includes(q)||(r.empNo||'').includes(q)):allRows;
+
+  const totalN=allRows.length;
+  const passN=allRows.filter(r=>r.passed).length;
+  const avgScore=totalN?avg(allRows.map(r=>+r.score||0)):0;
+
+  const backBar=`<div class="row" style="margin-bottom:12px;gap:10px;align-items:center;flex-wrap:wrap">
+    <button class="btn sm" onclick="TL_TEST=null;TL_Q='';render()">← 테스트 목록으로</button>
+    <div class="card-title" style="margin:0">${esc(TL_TEST)}</div>
   </div>`;
 
   const summary=`<div class="grid g3" style="margin-bottom:14px">
@@ -3415,51 +3491,24 @@ function vTestLog(){
     ${hiddenCols.map(k=>{const meta=TL_FIXED_COLS.find(c=>c.key===k);return `<span class="badge gray" style="margin-left:4px;cursor:pointer" onclick="toggleTestCol('${TL_ROLE}','${k}')">↺ ${esc(meta?meta.label.trim():k)}</span>`;}).join('')}
   </div>`:'';
 
-  const inlinePanel=renderTlInlinePanel();
-
-  if(!totalN){
-    return tabs+summary+inlinePanel+hiddenBar+(TL_INLINE_OPEN?'':'<div class="empty">등록된 테스트 이력이 없습니다. "＋ 테스트 결과 추가"로 등록해주세요.</div>');
-  }
-
-  // 테스트명별로 그룹핑
-  const byName={};
-  filtered.forEach(r=>{
-    const key=r.testName||'(이름 없음)';
-    if(!byName[key])byName[key]=[];
-    byName[key].push(r);
-  });
-  const names=Object.keys(byName).sort((a,b)=>{
-    const la=byName[a].slice().sort((x,y)=>x.date<y.date?1:-1)[0]?.date||'';
-    const lb=byName[b].slice().sort((x,y)=>x.date<y.date?1:-1)[0]?.date||'';
-    return la<lb?1:la>lb?-1:0;
-  });
-
   const visCols=TL_FIXED_COLS.filter(c=>!hiddenCols.includes(c.key));
   // 성명(응시자) 열은 항상 고정 표시 — 팀 열 바로 뒤에 위치하도록 앞/뒤로 나눔
   const colsBefore=visCols.filter(c=>c.key==='store');
   const colsAfter=visCols.filter(c=>c.key!=='store');
 
-  const groups=names.map(name=>{
-    const rows=byName[name].slice().sort((a,b)=>TL_SORT.key?tlCompare(a,b,TL_SORT.key)*TL_SORT.dir:(a.date<b.date?1:-1));
-    const n=rows.length,p=rows.filter(r=>r.passed).length;
-    const avgS=avg(rows.map(r=>+r.score||0));
-    // 이 테스트명 안에서 실제로 쓰인 과목들을 등장 순서대로 합침 (과목 수가 기록마다 다를 수 있음)
-    const subjNames=[];
-    rows.forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
-    const nameArg=JSON.stringify(name).replace(/"/g,'&quot;');
-    return `<div class="card" style="margin-bottom:14px">
+  const rows=filtered.slice().sort((a,b)=>TL_SORT.key?tlCompare(a,b,TL_SORT.key)*TL_SORT.dir:(a.date<b.date?1:-1));
+  const subjNames=[];
+  allRows.forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
+  const nameArg=JSON.stringify(TL_TEST).replace(/"/g,'&quot;');
+
+  const table=!rows.length?'<div class="empty">검색 결과가 없습니다.</div>':`<div class="card" style="margin-bottom:14px">
       <div class="card-pad" style="border-bottom:1px solid var(--border)">
         <div class="spread">
-          <div class="card-title">${esc(name)}</div>
-          <div class="row" style="gap:14px;font-size:.85rem;color:var(--ink2);flex-wrap:wrap">
-            <span>응시 <b class="num">${n}</b>명</span>
-            <span>합격률 <b class="num" style="color:var(--green)">${pct(n?p/n*100:0)}</b></span>
-            <span>평균 <b class="num">${f1(avgS)}</b>점</span>
-            <button class="btn sm" onclick="addGroupSubject('${TL_ROLE}',${nameArg})">＋ 과목</button>
-          </div>
+          <div class="card-title">개인별 성적</div>
+          <button class="btn sm" onclick="addGroupSubject('${TL_ROLE}',${nameArg})">＋ 과목</button>
         </div>
       </div>
-      <div class="card-sub" style="padding:0 22px 8px">값은 표에서 바로 클릭해서 수정할 수 있고, 열 제목 옆 ✕로 필요 없는 열을 숨길 수 있어요.</div>
+      <div class="card-sub" style="padding:0 22px 8px">값은 표에서 바로 클릭해서 수정할 수 있고, 열 제목 옆 ✕로 필요 없는 열을 숨기거나 제목을 클릭해 정렬할 수 있어요.</div>
       <div style="overflow-x:auto"><table class="tbl">
         <thead><tr>
           ${colsBefore.map(c=>`<th style="${c.thStyle||''}"><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol('${c.key}')">${esc(c.label.trim())}${tlSortArrow(c.key)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(c.label.trim())}' 열 숨기기" onclick="toggleTestCol('${TL_ROLE}','${c.key}')">✕</span></th>`).join('')}
@@ -3486,9 +3535,8 @@ function vTestLog(){
         </tr>`;}).join('')}</tbody>
       </table></div>
     </div>`;
-  }).join('');
 
-  return tabs+summary+inlinePanel+hiddenBar+groups;
+  return tabs+inlinePanel+backBar+summary+hiddenBar+table;
 }
 
 function renderTlInlinePanel(){
@@ -3539,7 +3587,8 @@ function renderTlInlinePanel(){
 function openTlInline(){
   TL_INLINE_OPEN=true;
   closeModal();
-  TL_BULK={mode:'add',editId:'',role:TL_ROLE,testName:'',date:new Date().toISOString().slice(0,10),subjects:[],rows:[tlEmptyRow(0)]};
+  // 특정 테스트의 대쉬보드를 보고 있는 상태에서 열었다면 테스트명을 미리 채워준다
+  TL_BULK={mode:'add',editId:'',role:TL_ROLE,testName:TL_TEST||'',date:new Date().toISOString().slice(0,10),subjects:[],rows:[tlEmptyRow(0)]};
   render();
   renderTlSubjectChips();renderTlRowsTable();
 }
@@ -3766,6 +3815,7 @@ function saveTestBulk(){
     });
   }
   TL_ROLE=role;
+  TL_TEST=testName; // 저장 직후 바로 그 테스트의 대쉬보드를 보여줌
   save();
   newRecs.forEach(sbUpsertTestRecord);
   TL_BULK=null;
