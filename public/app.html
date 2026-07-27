@@ -416,6 +416,9 @@ function load(){
   DB.testRecords=DB.testRecords||[]; // 테스트 이력관리 (직책별 테스트 합격/점수)
   DB.deletedTestRecordIds=DB.deletedTestRecordIds||[]; // 삭제한 테스트 이력 id (서버 삭제 실패 시 재등장 방지)
   DB.testHiddenCols=DB.testHiddenCols||{}; // 직책별로 숨긴 테스트 이력관리 고정 열
+  DB.linkTabs=DB.linkTabs||[{id:'default',name:'기본',links:[]}]; // 링크관리 — 탭별 공유 링크 모음
+  if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
+  DB.deletedLinkTabIds=DB.deletedLinkTabIds||[]; // 삭제한 링크 탭 id (서버 삭제 실패 시 재등장 방지)
   save();
 }
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(DB));}catch(e){}}
@@ -700,6 +703,7 @@ const MENUS=[['dash','Dashboard','M3 13h6V3H3v10zm0 8h6v-6H3v6zm8 0h10V11H11v10z
  ['guide','교육생안내','M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM5 10h9v2H5zm0-3h9v2H5zm0 6h6v2H5zm11 1l-1.4-1.4L16 11.2l-1.4-1.4L13 11.4 11.6 10 10 11.6l3 3 5-5z'],
  ['feedback','강사피드백','M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12l-3-3-3 3V4h6v10z'],
  ['testlog','테스트 이력관리','M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-7.5 9.5l2 2 4.5-4.5'],
+ ['links','링크관리','M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z'],
  ['settings','설정','M19.4 13a7.7 7.7 0 000-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 00-1.7-1l-.4-2.6h-4l-.4 2.6a7.7 7.7 0 00-1.7 1l-2.4-1-2 3.4L6.6 11a7.7 7.7 0 000 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 001.7 1l.4 2.6h4l.4-2.6a7.7 7.7 0 001.7-1l2.4 1 2-3.4-2.2-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z']];
 const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간'],trainings:['교육관리','교육·강의 구성 · QR/설문 URL · 응답 마감'],
  instructors:['강사관리','강사 등록 · 강사별 Dashboard'],surveys:['설문관리','설문 구성 미리보기'],
@@ -709,6 +713,7 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  guide:['교육생안내','출석QR · 일정안내 · 만족도QR — 16:9 교육용 화면'],
  feedback:['강사피드백','교육 차수별 강사 피드백 작성'],
  testlog:['테스트 이력관리','직책별 테스트 합격 여부 · 점수 관리'],
+ links:['링크관리','자주 쓰는 공유 링크를 탭별로 정리'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
 // 세션 복구 시 1번만 Supabase 동기화
@@ -789,7 +794,7 @@ function render(){
   const parts=h.replace('#/','').split('/');
   const page=parts[0]||'dash';
   const body={dash:vDash,trainings:vTrainings,instructors:parts[1]?()=>vInstructorDetail(parts[1]):vInstructors,
-    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,testlog:vTestLog,settings:vSettings}[page]||vDash;
+    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,testlog:vTestLog,links:vLinks,settings:vSettings}[page]||vDash;
   const [title,sub]=PAGE_META[page]||PAGE_META.dash;
   $('#app').innerHTML=`
   <div class="layout">
@@ -928,6 +933,8 @@ async function syncFromSupabase(){
     }
     // 테스트 이력관리 동기화 (test_records 테이블이 없으면 조용히 건너뜀)
     await syncTestRecords();
+    // 링크관리 동기화 (link_tabs 테이블이 없으면 조용히 건너뜀)
+    await syncLinkTabs();
     save();
     _syncing=false;
     console.log('동기화 완료');
@@ -3889,6 +3896,134 @@ async function syncTestRecords(){
   }catch(e){console.warn('테스트 이력 동기화 오류:',e);}
 }
 
+
+/* ═══════════ 링크관리 (탭별 공유 링크 모음) ═══════════ */
+let LT_TAB=null; // 선택된 탭 id
+function ltTabs(){
+  DB.linkTabs=DB.linkTabs||[];
+  if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
+  return DB.linkTabs;
+}
+function ltCurrentTab(){
+  const tabs=ltTabs();
+  if(!LT_TAB||!tabs.find(t=>t.id===LT_TAB))LT_TAB=tabs[0].id;
+  return tabs.find(t=>t.id===LT_TAB);
+}
+function addLinkTab(){
+  const name=(prompt('새 탭 이름을 입력해주세요')||'').trim();
+  if(!name)return;
+  const id='lt'+Date.now()+Math.random().toString(36).slice(2,6);
+  const tab={id,name,links:[]};
+  DB.linkTabs.push(tab);
+  LT_TAB=id;
+  save();render();
+  sbUpsertLinkTab(tab);
+}
+function renameLinkTab(id){
+  const tab=DB.linkTabs.find(t=>t.id===id);if(!tab)return;
+  const name=(prompt('탭 이름 수정',tab.name)||'').trim();
+  if(!name)return;
+  tab.name=name;save();render();
+  sbUpsertLinkTab(tab);
+}
+function deleteLinkTab(id){
+  if(DB.linkTabs.length<=1){toast('탭은 최소 1개 있어야 합니다');return;}
+  if(!confirm('이 탭과 안의 링크를 모두 삭제하시겠습니까?'))return;
+  DB.linkTabs=DB.linkTabs.filter(t=>t.id!==id);
+  DB.deletedLinkTabIds=DB.deletedLinkTabIds||[];
+  if(!DB.deletedLinkTabIds.includes(id))DB.deletedLinkTabIds.push(id);
+  if(LT_TAB===id)LT_TAB=DB.linkTabs[0].id;
+  save();render();
+  sbDeleteLinkTab(id);
+}
+function addLink(tabId){
+  const tab=DB.linkTabs.find(t=>t.id===tabId);if(!tab)return;
+  tab.links=tab.links||[];
+  tab.links.push({id:'lk'+Date.now()+Math.random().toString(36).slice(2,6),title:'',url:''});
+  save();render();
+  sbUpsertLinkTab(tab);
+}
+function updateLink(tabId,linkId,field,value){
+  const tab=DB.linkTabs.find(t=>t.id===tabId);if(!tab)return;
+  const link=(tab.links||[]).find(l=>l.id===linkId);if(!link)return;
+  link[field]=value;
+  save();
+  toast('저장되었습니다');
+  sbUpsertLinkTab(tab);
+}
+function deleteLink(tabId,linkId){
+  const tab=DB.linkTabs.find(t=>t.id===tabId);if(!tab)return;
+  if(!confirm('이 링크를 삭제하시겠습니까?'))return;
+  tab.links=(tab.links||[]).filter(l=>l.id!==linkId);
+  save();render();
+  sbUpsertLinkTab(tab);
+}
+function sbUpsertLinkTab(tab){
+  try{
+    fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/link_tabs',{
+      method:'POST',
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({id:tab.id,name:tab.name,links:tab.links||[]})
+    });
+  }catch(e){}
+}
+async function sbDeleteLinkTab(id){
+  try{
+    await fetch(`https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/link_tabs?id=eq.${id}`,{
+      method:'DELETE',
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+  }catch(e){}
+}
+async function syncLinkTabs(){
+  try{
+    const rr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/link_tabs?select=*',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    if(!rr.ok)return; // link_tabs 테이블이 없으면 조용히 건너뜀
+    const rows=await rr.json();
+    if(!rows)return;
+    DB.linkTabs=DB.linkTabs||[];
+    const delSet=new Set(DB.deletedLinkTabIds||[]);
+    rows.forEach(row=>{
+      if(delSet.has(row.id))return; // 이 브라우저에서 이미 삭제한 탭은 다시 불러오지 않음
+      const existing=DB.linkTabs.find(t=>t.id===row.id);
+      const mapped={id:row.id,name:row.name||'',links:row.links||[]};
+      if(existing)Object.assign(existing,mapped);
+      else DB.linkTabs.push(mapped);
+    });
+    if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
+    save();
+  }catch(e){console.warn('링크관리 동기화 오류:',e);}
+}
+function vLinks(){
+  const tabs=ltTabs();
+  const cur=ltCurrentTab();
+
+  const tabBar=`<div class="row" style="gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    ${tabs.map(t=>{
+      const on=t.id===cur.id;
+      return `<span class="btn ${on?'primary':''} sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px" onclick="LT_TAB='${t.id}';render()">
+        ${esc(t.name)}
+        ${on?`<span style="cursor:pointer;opacity:.85" title="탭 이름 수정" onclick="event.stopPropagation();renameLinkTab('${t.id}')">✎</span><span style="cursor:pointer;opacity:.85" title="탭 삭제" onclick="event.stopPropagation();deleteLinkTab('${t.id}')">✕</span>`:''}
+      </span>`;
+    }).join('')}
+    <button class="btn sm" onclick="addLinkTab()">＋ 탭 추가</button>
+  </div>`;
+
+  const links=cur.links||[];
+  const list=links.length?links.map(l=>`
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input class="input" style="flex:1;min-width:160px" placeholder="링크 이름" value="${esc(l.title||'')}" onchange="updateLink('${cur.id}','${l.id}','title',this.value)">
+        <input class="input" style="flex:2;min-width:220px" placeholder="https://..." value="${esc(l.url||'')}" onchange="updateLink('${cur.id}','${l.id}','url',this.value)">
+        <a class="btn sm" href="${esc(l.url||'#')}" target="_blank" rel="noopener"${l.url?'':' onclick="return false;"'}>열기 ↗</a>
+        <button class="btn sm ghost" onclick="deleteLink('${cur.id}','${l.id}')">🗑</button>
+      </div>
+    </div>`).join(''):'<div class="empty">등록된 링크가 없습니다. "＋ 링크 추가"로 등록해주세요.</div>';
+
+  return tabBar+`<div class="row" style="margin-bottom:12px"><button class="btn primary sm" onclick="addLink('${cur.id}')">＋ 링크 추가</button></div>`+list;
+}
 
 function vSettings(){
   return `<div class="grid g2">
