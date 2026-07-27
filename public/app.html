@@ -412,6 +412,7 @@ function load(){
   }catch(e){
     DB={trainings:[],instructors:[],responses:[],ai:{},theme:'light'};
   }
+  DB.deletedResponseIds=DB.deletedResponseIds||[]; // 관리자가 삭제한 응답 id (서버 삭제가 막혀 있어도 새로고침 시 되살아나지 않도록)
   save();
 }
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(DB));}catch(e){}}
@@ -912,7 +913,9 @@ async function syncFromSupabase(){
     });
     const responses=await rr.json();
     if(responses&&responses.length){
+      const delSet=new Set(DB.deletedResponseIds||[]);
       responses.forEach(r=>{
+        if(delSet.has(r.id))return; // 이 브라우저에서 이미 삭제 처리한 응답은 다시 불러오지 않음
         if(!DB.responses.find(x=>x.id===r.id)){
           DB.responses.push({
             id:r.id,trainingId:r.training_id,at:r.submitted_at,
@@ -1098,12 +1101,16 @@ async function deleteTraining(id){
 async function deleteResponse(rid, tid){
   if(!confirm('이 응답을 삭제하시겠습니까?'))return;
   DB.responses=DB.responses.filter(r=>r.id!==rid);
+  // 서버 삭제가 (권한 등의 이유로) 실패해도 새로고침 시 다시 나타나지 않도록 로컬에 삭제 기록을 남김
+  DB.deletedResponseIds=DB.deletedResponseIds||[];
+  if(!DB.deletedResponseIds.includes(rid))DB.deletedResponseIds.push(rid);
   delete DB.ai[tid]; save();
   try{
-    await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/responses?id=eq.'+rid,{
+    const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/responses?id=eq.'+rid,{
       method:'DELETE',
       headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
     });
+    if(!res.ok)console.warn('Supabase 응답 삭제 실패 (상태 '+res.status+') — 서버에는 남아있지만 이 브라우저에서는 계속 숨김 처리됩니다');
   }catch(e){console.warn(e);}
   render(); toast('응답이 삭제되었습니다');
 }
