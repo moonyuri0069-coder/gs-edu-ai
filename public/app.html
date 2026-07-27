@@ -432,13 +432,9 @@ function lectLabel(t,L){const ins=byId(DB.instructors,L.instructorId);const nm=i
 function lectSurveyOn(L){return !L.isTest;}
 // 설문 대상 후보 강의: 첫/마지막(개회·수료)·점심식사·가치공유 제외 + 동일강사 중복 제거 (설문 on/off와 무관하게 전체 후보를 반환)
 function survCandidates(t){
-  const seen=new Set();
   return t.lectures.filter((L,i,arr)=>{
     if(i===0||i===arr.length-1)return false;
     if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
-    const k=L.instructorId||L.instructorName||L.title;
-    if(k&&seen.has(k))return false;
-    if(k)seen.add(k);
     return true;
   });
 }
