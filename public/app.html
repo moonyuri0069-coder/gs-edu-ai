@@ -426,7 +426,58 @@ const byId=(arr,id)=>arr.find(x=>x.id===id);
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2200);}
 function respOf(tid){return DB.responses.filter(r=>r.trainingId===tid);}
 function lectOf(t,lid){return t.lectures.find(l=>l.id===lid);}
-function lectLabel(t,L){const ins=byId(DB.instructors,L.instructorId);return `${L.title} - ${ins?ins.name:''}`;}
+function lectLabel(t,L){const ins=byId(DB.instructors,L.instructorId);const nm=ins?ins.name:(L.instructorName||'');return nm?`${L.title} - ${nm}`:L.title;}
+// 설문 포함 여부: surveyOff가 명시적으로 지정되면 그 값을 우선하고, 아니면 테스트(isTest) 과목은 기본 제외
+function lectSurveyOn(L){if(typeof L.surveyOff==='boolean')return !L.surveyOff;return !L.isTest;}
+// 설문 대상 후보 강의: 첫/마지막(개회·수료)·점심식사·가치공유 제외 + 동일강사 중복 제거 (설문 on/off와 무관하게 전체 후보를 반환)
+function survCandidates(t){
+  const seen=new Set();
+  return t.lectures.filter((L,i,arr)=>{
+    if(i===0||i===arr.length-1)return false;
+    if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
+    const k=L.instructorId||L.instructorName||L.title;
+    if(k&&seen.has(k))return false;
+    if(k)seen.add(k);
+    return true;
+  });
+}
+// 실제 설문에 노출될 문항: 후보 중 설문 on 인 것 + 관리자가 추가한 커스텀 문항
+function surveyLectures(t){
+  const extra=(t.surveyExtra||[]).map(e=>({id:e.id,title:e.title,instructorId:'',instructorName:'',field:'',isExtra:true}));
+  return survCandidates(t).filter(lectSurveyOn).concat(extra);
+}
+// 설문 항목 on/off 토글 (삭제 대신 소프트 제외 — 실제 교육일정에는 영향 없음)
+function toggleSurveyLect(tid,lid){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  const L=lectOf(t,lid);if(!L)return;
+  L.surveyOff=lectSurveyOn(L); // 켜져있으면 끄고, 꺼져있으면 켠다
+  save();sbUpsert('trainings',{id:tid,lectures:t.lectures});
+  toast(lectSurveyOn(L)?'설문에 포함했습니다':'설문에서 제외했습니다');
+  rerender();
+}
+function addSurveyExtra(tid){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  t.surveyExtra=t.surveyExtra||[];
+  const item={id:'ex'+Date.now(),title:'새 설문 문항'};
+  t.surveyExtra.push(item);
+  save();sbUpsert('trainings',{id:tid,survey_extra:t.surveyExtra});
+  rerender();
+  setTimeout(()=>{const el=document.getElementById('sx_'+item.id);if(el){el.focus();el.select();}},30);
+}
+function updateSurveyExtraTitle(tid,eid,val){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  const e=(t.surveyExtra||[]).find(x=>x.id===eid);if(!e)return;
+  e.title=val.trim()||'새 설문 문항';
+  save();sbUpsert('trainings',{id:tid,survey_extra:t.surveyExtra});
+}
+function removeSurveyExtra(tid,eid){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  if(!confirm('이 설문 문항을 삭제하시겠습니까?'))return;
+  t.surveyExtra=(t.surveyExtra||[]).filter(x=>x.id!==eid);
+  save();sbUpsert('trainings',{id:tid,survey_extra:t.surveyExtra});
+  rerender();
+  toast('설문 문항을 삭제했습니다');
+}
 function respAvg(r){return avg(Object.values(r.lect).flatMap(v=>[toScore(v.expert),toScore(v.practical)]));}
 function trainingAvg(tid){const rs=respOf(tid);return rs.length?avg(rs.map(respAvg)):0;}
 function trainingRate(t){const n=respOf(t.id).length;return t.invited?Math.min(100,n/t.invited*100):0;}
@@ -837,7 +888,8 @@ async function syncFromSupabase(){
         const mapped={id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
           place:t.place,invited:t.invited,status:t.status,subtitle:t.subtitle||'',
           agendaHead:t.agenda_head||'',lectures:t.lectures||[],
-          attendees:t.attendees||[],budget:t.budget||[],checkins:t.checkins||[]};
+          attendees:t.attendees||[],budget:t.budget||[],checkins:t.checkins||[],
+          surveyExtra:t.survey_extra||(existing?existing.surveyExtra:null)||[]};
         if(existing){Object.assign(existing,mapped);}
         else{DB.trainings.push(mapped);}
       });
@@ -1134,8 +1186,8 @@ function openEditTraining(tid){
    <div class="fld-group"><label class="fld">교육대상자</label><input class="input num" id="fInvited" type="number" value="${t.invited}"></div>
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">강의 구성</label>
-    <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
-      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
+    <div style="display:grid;grid-template-columns:100px 1fr 90px 90px 64px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
+      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span style="text-align:center">테스트</span><span></span></div>
     <div id="lectList" onpaste="pasteLectData(event)"
   ondragover="event.preventDefault();this.style.background='#e8f2ec'"
   ondragleave="this.style.background=''"
@@ -1188,7 +1240,7 @@ async function saveEditTraining(tid){
     }
     // 강사 field 업데이트
     if(iid&&L.field){const ins=byId(DB.instructors,iid);if(ins&&!ins.field)ins.field=L.field;}
-    return {id:L.id||'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||''};
+    return {id:L.id||'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||'',isTest:!!L.isTest,surveyOff:L.surveyOff};
   });
   t.name=name;t.date=date;t.round=+$('#fRound').value||1;
   t.type=$('#fType').value;t.place=$('#fPlace').value.trim()||'미정';
@@ -1202,7 +1254,7 @@ async function saveEditTraining(tid){
 }
 
 function openTrainingModal(){
-  LECT_DRAFT=[{title:'',slot:'',instructorId:'',instructorName:'',field:''}];
+  LECT_DRAFT=[{title:'',slot:'',instructorId:'',instructorName:'',field:'',isTest:false}];
   ATT_DRAFT=[];
   openModal('새 교육 만들기',`
    <div class="fld-group"><label class="fld">교육명 *</label><input class="input" id="fName" placeholder="예) 26년 부점장 향상 과정"></div>
@@ -1217,8 +1269,8 @@ function openTrainingModal(){
    <div class="fld-group"><label class="fld">교육대상자</label><input class="input num" id="fInvited" type="number" min="1" value="15"></div>
    <div class="divider"></div>
    <div class="fld-group"><label class="fld">강의 구성 * <span style="font-weight:400;color:var(--ink3)">— 설문에 이 순서로 반복됩니다. 시간대는 보고서에 표시됩니다.</span></label>
-    <div style="display:grid;grid-template-columns:110px 1fr 100px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
-      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span></span></div>
+    <div style="display:grid;grid-template-columns:100px 1fr 90px 90px 64px 28px;gap:6px;margin-bottom:4px;font-size:.75rem;color:var(--ink3);font-weight:700;padding:0 2px">
+      <span>시간대</span><span>강의명</span><span>교육팀</span><span>강사</span><span style="text-align:center">테스트</span><span></span></div>
     <div id="lectList"></div>
     <div class="row" style="margin-top:6px;gap:6px;align-items:center">
       <button class="btn sm" onclick="addLectRow()">＋ 강의 추가</button>
@@ -1249,20 +1301,23 @@ function openTrainingModal(){
 }
 function renderLectRows(){
   $('#lectList').innerHTML=LECT_DRAFT.map((L,i)=>`
-   <div style="display:grid;grid-template-columns:100px 1fr 90px 90px 28px;gap:6px;margin-bottom:6px;align-items:center">
+   <div style="display:grid;grid-template-columns:100px 1fr 90px 90px 64px 28px;gap:6px;margin-bottom:6px;align-items:center">
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="09:00~10:00" value="${esc(L.slot||'')}"
       oninput="LECT_DRAFT[${i}].slot=this.value">
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강의명" value="${esc(L.title)}"
       oninput="LECT_DRAFT[${i}].title=this.value">
     <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="사업기획팀" value="${esc(L.field||byId(DB.instructors,L.instructorId)?.field||'')}"
       oninput="LECT_DRAFT[${i}].field=this.value">
-    <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강사명" 
+    <input class="input" style="font-size:.78rem;padding:7px 8px" placeholder="강사명"
       value="${esc(L.instructorName||byId(DB.instructors,L.instructorId)?.name||'')}"
       oninput="LECT_DRAFT[${i}].instructorName=this.value;LECT_DRAFT[${i}].instructorId=''">
+    <label class="row" style="gap:4px;font-size:.72rem;color:var(--ink3);cursor:pointer;justify-content:center" title="테스트로 표시하면 이 과목은 설문조사에서 자동 제외됩니다">
+      <input type="checkbox" ${L.isTest?'checked':''} onchange="LECT_DRAFT[${i}].isTest=this.checked">테스트
+    </label>
     <button class="btn sm ghost" style="padding:4px 6px" onclick="LECT_DRAFT.splice(${i},1);renderLectRows()">✕</button>
    </div>`).join('');
 }
-function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:'',instructorName:'',field:''});renderLectRows();}
+function addLectRow(){LECT_DRAFT.push({title:'',slot:'',instructorId:'',instructorName:'',field:'',isTest:false});renderLectRows();}
 
 async function pasteFromClipboard(type){
   try{
@@ -1480,7 +1535,7 @@ function saveTraining(){
       }
     }
     if(iid&&L.field){const ins=byId(DB.instructors,iid);if(ins&&!ins.field)ins.field=L.field;}
-    return {id:'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||''};
+    return {id:'L'+i,title:L.title.trim(),slot:L.slot||'',instructorId:iid||'',instructorName:iname,field:L.field||'',isTest:!!L.isTest};
   });
   if(!lectures.length){toast('강의를 1개 이상 등록해주세요');return;}
   const attendees=ATT_DRAFT.filter(a=>a.name.trim());
@@ -1688,8 +1743,8 @@ function vSurveys(){
     const rs=respOf(sel.id);
     const rate=sel.invited?Math.min(100,Math.round(rs.length/sel.invited*100)):0;
     const barW=rate;
-    // 강의별 평균
-    const lectStats=sel.lectures.map(L=>{
+    // 강의별 평균 (실제 설문에 노출된 항목만: 테스트/설문제외 과목은 응답 자체가 없으므로 제외)
+    const lectStats=surveyLectures(sel).map(L=>{
       const vs=rs.map(r=>r.lect[L.id]).filter(Boolean);
       const ex=avg(vs.map(v=>v.expert)),pr=avg(vs.map(v=>v.practical));
       const tot=avg([...vs.map(v=>toScore(v.expert)),...vs.map(v=>toScore(v.practical))]);
@@ -1813,7 +1868,44 @@ function vSurveys(){
        </div>`).join('')}
       </div>
     </div>
+  </div>
+
+  <!-- 설문 문항 관리 -->
+  <div class="card card-pad" style="margin-top:14px">
+    <div class="spread" style="margin-bottom:4px">
+      <div class="card-title">설문 문항 관리</div>
+      ${sel?`<button class="btn sm primary" onclick="addSurveyExtra('${sel.id}')">＋ 문항 추가</button>`:''}
+    </div>
+    <div class="card-sub" style="margin-bottom:12px">체크를 끄면 해당 과목은 설문에서 빠집니다 (교육일정에는 영향 없음). 테스트로 등록된 과목은 자동으로 제외됩니다.</div>
+    ${sel?renderSurveyManageList(sel):'<div class="empty">교육을 선택해주세요</div>'}
   </div>`;
+}
+function renderSurveyManageList(t){
+  const cands=survCandidates(t);
+  const extras=t.surveyExtra||[];
+  if(!cands.length&&!extras.length)return '<div class="empty">등록된 강의가 없습니다</div>';
+  const rowsA=cands.map(L=>{
+    const ins=byId(DB.instructors,L.instructorId);
+    const on=lectSurveyOn(L);
+    return `<div class="spread" style="padding:8px 4px;border-bottom:1px dashed var(--border)">
+      <label class="row" style="gap:8px;cursor:pointer;font-size:.88rem">
+        <input type="checkbox" ${on?'checked':''} onchange="toggleSurveyLect('${t.id}','${L.id}')">
+        <span style="font-weight:700;${on?'':'color:var(--ink4);text-decoration:line-through'}">${esc(L.title)}</span>
+        <span class="card-sub">${esc(L.instructorName||ins?.name||'')}</span>
+        ${L.isTest?'<span class="badge amber">테스트</span>':''}
+        ${!on?'<span class="badge gray">설문 제외</span>':''}
+      </label>
+    </div>`;
+  }).join('');
+  const rowsB=extras.map(e=>`<div class="spread" style="padding:8px 4px;border-bottom:1px dashed var(--border);gap:8px">
+      <div class="row" style="gap:8px;flex:1">
+        <span class="badge green">추가 문항</span>
+        <input id="sx_${e.id}" class="input" style="max-width:320px;padding:6px 10px;font-size:.85rem" value="${esc(e.title)}"
+          onblur="updateSurveyExtraTitle('${t.id}','${e.id}',this.value)">
+      </div>
+      <button class="btn sm ghost" onclick="removeSurveyExtra('${t.id}','${e.id}')">🗑 삭제</button>
+    </div>`).join('');
+  return rowsA+rowsB;
 }
 
 /* ═══════════ 결과분석 (과정 Dashboard) ═══════════ */
@@ -2980,10 +3072,11 @@ function vFeedback(){
   if(!FBQ&&tlist.length)FBQ=tlist[0].id;
   const t=FBQ?byId(DB.trainings,FBQ):null;
 
-  // 강사 목록 (해당 교육 강의에서 추출, 제외 강의 빼고)
+  // 강사 목록 (해당 교육 강의에서 추출, 제외 강의·테스트/설문제외 과목 빼고 — 설문 응답 자체가 없음)
   const fbLects=t?t.lectures.filter((L,i,arr)=>{
     if(i===0||i===arr.length-1)return false;
     if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
+    if(!lectSurveyOn(L))return false;
     return true;
   }):[];
   // 강사 중복 제거
@@ -3238,7 +3331,8 @@ async function renderSurvey(tid){
       const mapped={id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
         place:t.place,invited:t.invited,status:t.status,
         lectures:t.lectures||[],attendees:t.attendees||[],
-        budget:t.budget||[],checkins:t.checkins||[],subtitle:t.subtitle||''};
+        budget:t.budget||[],checkins:t.checkins||[],subtitle:t.subtitle||'',
+        surveyExtra:t.survey_extra||[]};
       const ex=DB.trainings.findIndex(x=>x.id===tid);
       if(ex>=0){DB.trainings[ex]=mapped;}else{DB.trainings.push(mapped);}
       // 강사 로드
@@ -3261,18 +3355,8 @@ async function renderSurvey(tid){
   if(t.status!=='open'&&!session){$('#app').innerHTML=`<div class="survey-wrap"><div class="sv-card" style="text-align:center">
     <div class="sv-title">응답이 마감되었습니다</div><div class="card-sub" style="margin-top:6px">${esc(t.name)} ${t.round}차 · 교육담당자에게 문의해주세요</div></div></div>`;return;}
   if(!SV.tid||SV.tid!==tid){
-    // 첫번째/마지막 강의 제외 + 같은 강사 중복 제거
-    const seenInstr=new Set();
-    const uniqueLects=t.lectures
-      .filter((_,i,arr)=>i>0&&i<arr.length-1) // 첫/마지막 제외
-      .filter(L=>!(L.title&&L.title.includes('점심식사'))) // 점심식사 제외
-      .filter(L=>!(L.title&&L.title.includes('가치공유'))) // 가치공유 제외
-      .filter(L=>{
-        // 동일팀+동일강사 조합으로 중복 제거
-        const key=L.instructorId||L.instructorName||'';
-        if(seenInstr.has(key))return false;
-        seenInstr.add(key);return true;
-      });
+    // 테스트 과목·설문 제외 항목은 빼고, 관리자가 추가한 문항은 포함
+    const uniqueLects=surveyLectures(t);
     SV={tid,lect:{},recommendLecture:'',need:'',etc:'',lectures:uniqueLects};
     uniqueLects.forEach(L=>SV.lect[L.id]={expert:0,practical:0,good:'',improve:''});
   }
@@ -3300,7 +3384,7 @@ async function renderSurvey(tid){
      <span class="badge gray">${t.type}</span><span class="badge gray">${esc(t.place)}</span></div>
     <div class="card-sub" style="margin-top:10px">강의별 평가 후 마지막에 과정 전체 설문이 이어집니다. (약 3분 · 익명)</div>
    </div>
-   ${(SV.lectures||t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1)).map((L,ix,arr)=>{const v=SV.lect[L.id]||{expert:0,practical:0,good:'',improve:''};const label=lectLabel(t,L);
+   ${(SV.lectures||surveyLectures(t)).map((L,ix,arr)=>{const v=SV.lect[L.id]||{expert:0,practical:0,good:'',improve:''};const label=lectLabel(t,L);
     return `<div class="sv-card">
      <div class="sv-section">강의평가 ${ix+1} / ${arr.length}</div>
      <div style="font-weight:800;font-size:1.02rem">${esc(label)}</div>
@@ -3313,7 +3397,7 @@ async function renderSurvey(tid){
     </div>`;}).join('')}
    <div class="sv-card"><div class="sv-section">과정 전체 설문</div>
     <div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
-    ${(SV.lectures||lstats.map(x=>x.L)).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog();document.querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">
+    ${(SV.lectures||surveyLectures(t)).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog();document.querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">
       <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}
     <div class="sv-q">${esc(t.name)}에서 추가로 필요한(듣고 싶은) 강의 콘텐츠는 무엇인가요?</div>
     <textarea class="input" rows="2" oninput="SV.need=this.value">${esc(SV.need)}</textarea>
