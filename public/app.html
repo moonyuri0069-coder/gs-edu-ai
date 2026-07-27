@@ -3368,7 +3368,14 @@ let TL_TEST=null; // 선택된 테스트명 — null이면 테스트 목록 화�
 let TL_BULK=null; // 추가/수정 draft: {mode,editId,role,testName,date,subjects:[],rows:[]}
 let TL_INLINE_OPEN=false; // "+ 테스트 결과 추가"를 눌렀을 때 팝업 대신 페이지 안에 표를 펼칠지 여부
 
-// 고정 열(팀/사번/근속/응시일/총점수/백분율/통과여부/비고)도 과목처럼 화면에서 지웠다 되살릴 수 있게 관리
+// 사번으로 같은 사람의 "직전 응시" 기록을 찾아 전차수 대비 점수 변화를 계산 (같은 직책 안에서, 이 기록보다 날짜가 빠른 것 중 가장 최근)
+function tlPrevRecord(role,empNo,beforeDate,excludeId){
+  if(!empNo||!beforeDate)return null;
+  const candidates=(DB.testRecords||[]).filter(r=>r.role===role&&r.empNo===empNo&&r.id!==excludeId&&r.date&&r.date<beforeDate);
+  if(!candidates.length)return null;
+  return candidates.sort((a,b)=>a.date<b.date?1:-1)[0];
+}
+// 고정 열(팀/사번/근속/응시일/총점수/전차수 대비/통과여부/비고)도 과목처럼 화면에서 지웠다 되살릴 수 있게 관리
 const TL_FIXED_COLS=[
   {key:'store',label:'팀',thStyle:'min-width:80px',
     cell:r=>`<td><input class="input" style="padding:4px 6px;font-size:.78rem" value="${esc(r.store||'')}" onchange="updateTestField('${r.id}','store',this.value)"></td>`},
@@ -3380,8 +3387,16 @@ const TL_FIXED_COLS=[
     cell:r=>`<td><input class="input" type="date" style="padding:4px 6px;font-size:.78rem" value="${esc(r.date||'')}" onchange="updateTestField('${r.id}','date',this.value)"></td>`},
   {key:'score',label:'총점수',thStyle:'text-align:center;min-width:70px',
     cell:r=>`<td><input class="input num" style="padding:4px 6px;font-size:.78rem;width:56px;text-align:center" value="${r.score===''||r.score==null?'':esc(String(r.score))}" onchange="updateTestField('${r.id}','score',this.value)"></td>`},
-  {key:'percent',label:'백분율',thStyle:'text-align:center;min-width:64px',
-    cell:r=>`<td><input class="input num" style="padding:4px 6px;font-size:.78rem;width:56px;text-align:center" value="${r.percent===''||r.percent==null?'':esc(String(r.percent))}" onchange="updateTestField('${r.id}','percent',this.value)"></td>`},
+  {key:'prevDelta',label:'전차수 대비',thStyle:'text-align:center;min-width:90px',
+    cell:r=>{
+      const prev=tlPrevRecord(r.role,r.empNo,r.date,r.id);
+      if(!prev||prev.score===''||prev.score==null||r.score===''||r.score==null)
+        return `<td style="text-align:center;color:var(--ink4)" title="사번이 일치하는 이전 응시 기록이 없습니다">-</td>`;
+      const diff=Math.round(((+r.score||0)-(+prev.score||0))*10)/10;
+      const sign=diff>0?'+':'';
+      const color=diff>0?'var(--green,#0a7d43)':diff<0?'#be185d':'var(--ink3)';
+      return `<td style="text-align:center;font-weight:800;color:${color}" title="직전 응시: ${esc(prev.testName||'')} · ${esc(prev.date||'')} · ${esc(String(prev.score))}점">${sign}${diff}</td>`;
+    }},
   {key:'passed',label:'통과여부',thStyle:'text-align:center;min-width:90px',
     cell:r=>`<td style="${r.passed?'background:rgba(16,153,90,.12)':''}"><select class="select" style="padding:4px 6px;font-size:.78rem;font-weight:${r.passed?800:500};color:${r.passed?'var(--green,#10995a)':'inherit'}" onchange="updateTestField('${r.id}','passed',this.value)">
       <option value="1" ${r.passed?'selected':''}>합격</option><option value="0" ${!r.passed?'selected':''}>불합격</option></select></td>`},
@@ -3413,7 +3428,12 @@ function tlSortArrow(key){return TL_SORT.key===key?(TL_SORT.dir===1?' ▲':' ▼
 function tlSortVal(r,key){
   if(key==='person')return r.person||'';
   if(key==='passed')return r.passed?1:0;
-  if(key==='score'||key==='percent'){const v=r[key];return v===''||v==null?-Infinity:+v;}
+  if(key==='score'){const v=r[key];return v===''||v==null?-Infinity:+v;}
+  if(key==='prevDelta'){
+    const prev=tlPrevRecord(r.role,r.empNo,r.date,r.id);
+    if(!prev||prev.score===''||prev.score==null||r.score===''||r.score==null)return -Infinity;
+    return (+r.score||0)-(+prev.score||0);
+  }
   if(key==='store'||key==='empNo'||key==='tenure'||key==='date'||key==='memo')return r[key]||'';
   const s=(r.subjects||[]).find(x=>x.name===key);
   if(s)return s.score===''||s.score==null?-Infinity:+s.score;
@@ -3422,6 +3442,22 @@ function tlSortVal(r,key){
 function tlAvgOf(list,getter){
   const nums=list.map(getter).filter(v=>v!==''&&v!=null&&!isNaN(+v)).map(v=>+v);
   return nums.length?f1(avg(nums)):'-';
+}
+function tlAvgFooterCell(c,rows){
+  if(c.key==='score')return `<td style="text-align:center">${tlAvgOf(rows,r=>r[c.key])}</td>`;
+  if(c.key==='passed'){const p=rows.filter(r=>r.passed).length;return `<td style="text-align:center;color:var(--green)">${rows.length?pct(p/rows.length*100):'-'}</td>`;}
+  if(c.key==='prevDelta'){
+    const diffs=rows.map(r=>{
+      const prev=tlPrevRecord(r.role,r.empNo,r.date,r.id);
+      if(!prev||prev.score===''||prev.score==null||r.score===''||r.score==null)return null;
+      return (+r.score||0)-(+prev.score||0);
+    }).filter(v=>v!=null);
+    if(!diffs.length)return '<td></td>';
+    const a=avg(diffs);
+    const sign=a>0?'+':'';
+    return `<td style="text-align:center;color:${a>0?'var(--green)':a<0?'#be185d':'inherit'}">${sign}${f1(a)}</td>`;
+  }
+  return '<td></td>';
 }
 function tlCompare(a,b,key){
   const va=tlSortVal(a,key),vb=tlSortVal(b,key);
@@ -3605,17 +3641,9 @@ function vTestLog(){
           </td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr style="background:var(--bg2,rgba(127,127,127,.08));font-weight:800">
-          ${colsBefore.map(c=>{
-            if(c.key==='score'||c.key==='percent')return `<td style="text-align:center">${tlAvgOf(rows,r=>r[c.key])}</td>`;
-            if(c.key==='passed'){const p=rows.filter(r=>r.passed).length;return `<td style="text-align:center;color:var(--green)">${rows.length?pct(p/rows.length*100):'-'}</td>`;}
-            return '<td></td>';
-          }).join('')}
+          ${colsBefore.map(c=>tlAvgFooterCell(c,rows)).join('')}
           <td style="white-space:nowrap">평균</td>
-          ${colsAfter.map(c=>{
-            if(c.key==='score'||c.key==='percent')return `<td style="text-align:center">${tlAvgOf(rows,r=>r[c.key])}</td>`;
-            if(c.key==='passed'){const p=rows.filter(r=>r.passed).length;return `<td style="text-align:center;color:var(--green)">${rows.length?pct(p/rows.length*100):'-'}</td>`;}
-            return '<td></td>';
-          }).join('')}
+          ${colsAfter.map(c=>tlAvgFooterCell(c,rows)).join('')}
           ${subjNames.map(sn=>`<td style="text-align:center">${tlAvgOf(rows,r=>{const s=(r.subjects||[]).find(x=>x.name===sn);return s?s.score:'';})}</td>`).join('')}
           <td></td>
         </tr></tfoot>
@@ -3645,8 +3673,8 @@ function renderTlInlinePanel(){
        <input class="input" id="tbName" list="tbNameList" placeholder="예) 26년 상반기 OFC테스트" value="${esc(TL_BULK.testName)}">
        <datalist id="tbNameList">${existingNames.map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
       <div class="divider"></div>
-      <div class="fld-group"><label class="fld">엑셀에서 복사한 내용 붙여넣기 <span style="font-weight:400;color:var(--ink3)">— 팀, 성명, 사번, 근속년수, 총점수, 과목(개수 자유), 백분율, 통과여부 순서 · 첫 줄은 헤더(과목명 포함)</span></label>
-       <textarea class="input" id="tbPaste" rows="3" placeholder="팀	성명	사번	근속년수	총점수	과목1	과목2	과목3	과목4	백분율	통과여부"></textarea>
+      <div class="fld-group"><label class="fld">엑셀에서 복사한 내용 붙여넣기 <span style="font-weight:400;color:var(--ink3)">— 팀, 성명, 사번, 근속년수, 총점수, 과목(개수 자유), 통과여부 순서 · 첫 줄은 헤더(과목명 포함)</span></label>
+       <textarea class="input" id="tbPaste" rows="3" placeholder="팀	성명	사번	근속년수	총점수	과목1	과목2	과목3	과목4	통과여부"></textarea>
        <div class="row" style="margin-top:6px;gap:8px">
         <button class="btn sm primary" onclick="applyTestPaste()">📋 붙여넣기 반영</button>
         <span class="card-sub">엑셀 표를 복사한 뒤 위 칸에 붙여넣고 버튼을 눌러주세요 (아래 표 내용이 통째로 교체됩니다)</span>
@@ -3685,7 +3713,7 @@ function closeTlInline(){
 /* ── 목록에서 바로 수정 (인라인 편집) ── */
 function updateTestField(id,field,value){
   const rec=DB.testRecords.find(r=>r.id===id);if(!rec)return;
-  if(field==='score'||field==='percent'){
+  if(field==='score'){
     rec[field]=value===''?'':Math.max(0,Math.min(100,+value||0)); // 0~100 범위로 제한
   }else if(field==='passed'){
     rec.passed=(value==='1');
@@ -3720,10 +3748,12 @@ function exportTestCSV(role,testName){
   if(!targets.length){toast('내보낼 데이터가 없습니다');return;}
   const subjNames=[];
   targets.forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
-  const header=['팀','성명','사번','근속','응시일','총점수',...subjNames,'백분율','통과여부','비고'];
+  const header=['팀','성명','사번','근속','응시일','총점수',...subjNames,'전차수 대비','통과여부','비고'];
   const rows=[header,...targets.map(r=>{
     const subjVals=subjNames.map(sn=>{const s=(r.subjects||[]).find(x=>x.name===sn);return (s&&s.score!==''&&s.score!=null)?s.score:'';});
-    return [r.store||'',r.person||'',r.empNo||'',r.tenure||'',r.date||'',r.score??'',...subjVals,r.percent??'',r.passed?'합격':'불합격',r.memo||''];
+    const prev=tlPrevRecord(r.role,r.empNo,r.date,r.id);
+    const delta=(!prev||prev.score===''||prev.score==null||r.score===''||r.score==null)?'':((+r.score||0)-(+prev.score||0));
+    return [r.store||'',r.person||'',r.empNo||'',r.tenure||'',r.date||'',r.score??'',...subjVals,delta,r.passed?'합격':'불합격',r.memo||''];
   })];
   csv(rows,`테스트결과_${testName}.csv`);
 }
@@ -3753,10 +3783,10 @@ function removeGroupSubject(role,testName,name){
   toast(`'${name}' 과목을 삭제했습니다`);
 }
 
-function tlEmptyRow(nSubj){return {team:'',person:'',empNo:'',tenure:'',total:'',scores:new Array(nSubj||0).fill(''),percent:'',passed:true,memo:''};}
+function tlEmptyRow(nSubj){return {team:'',person:'',empNo:'',tenure:'',total:'',scores:new Array(nSubj||0).fill(''),passed:true,memo:''};}
 function tlRowFromRecord(rec){
   return {team:rec.store||'',person:rec.person||'',empNo:rec.empNo||'',tenure:rec.tenure||'',
-    total:rec.score??'',scores:(rec.subjects||[]).map(s=>s.score??''),percent:rec.percent??'',passed:!!rec.passed,memo:rec.memo||''};
+    total:rec.score??'',scores:(rec.subjects||[]).map(s=>s.score??''),passed:!!rec.passed,memo:rec.memo||''};
 }
 
 function openTestModal(id){
@@ -3770,8 +3800,8 @@ function openTestModal(id){
   }
   const existingNames=[...new Set(DB.testRecords.filter(r=>r.role===TL_BULK.role).map(r=>r.testName).filter(Boolean))];
   const pasteBox=TL_BULK.mode==='add'?`
-   <div class="fld-group"><label class="fld">엑셀에서 복사한 내용 붙여넣기 <span style="font-weight:400;color:var(--ink3)">— 팀, 성명, 사번, 근속년수, 총점수, 과목(개수 자유), 백분율, 통과여부 순서 · 첫 줄은 헤더(과목명 포함)</span></label>
-    <textarea class="input" id="tbPaste" rows="3" placeholder="팀	성명	사번	근속년수	총점수	과목1	과목2	과목3	과목4	백분율	통과여부"></textarea>
+   <div class="fld-group"><label class="fld">엑셀에서 복사한 내용 붙여넣기 <span style="font-weight:400;color:var(--ink3)">— 팀, 성명, 사번, 근속년수, 총점수, 과목(개수 자유), 통과여부 순서 · 첫 줄은 헤더(과목명 포함)</span></label>
+    <textarea class="input" id="tbPaste" rows="3" placeholder="팀	성명	사번	근속년수	총점수	과목1	과목2	과목3	과목4	통과여부"></textarea>
     <div class="row" style="margin-top:6px;gap:8px">
      <button class="btn sm primary" onclick="applyTestPaste()">📋 붙여넣기 반영</button>
      <span class="card-sub">엑셀 표를 복사한 뒤 위 칸에 붙여넣고 버튼을 눌러주세요 (아래 표 내용이 통째로 교체됩니다)</span>
@@ -3814,7 +3844,7 @@ function renderTlSubjectChips(){
 function renderTlRowsTable(){
   const el=$('#tlRowsWrap');if(!el)return;
   const subj=TL_BULK.subjects;
-  const head=`<tr><th>팀</th><th>성명</th><th>사번</th><th>근속</th><th style="width:70px">총점수</th>${subj.map(s=>`<th>${esc(s)}</th>`).join('')}<th style="width:70px">백분율</th><th style="width:90px">통과여부</th><th style="min-width:120px">비고</th>${TL_BULK.mode==='add'?'<th></th>':''}</tr>`;
+  const head=`<tr><th>팀</th><th>성명</th><th>사번</th><th>근속</th><th style="width:70px">총점수</th>${subj.map(s=>`<th>${esc(s)}</th>`).join('')}<th style="width:90px">통과여부</th><th style="min-width:120px">비고</th>${TL_BULK.mode==='add'?'<th></th>':''}</tr>`;
   const body=TL_BULK.rows.map((r,i)=>`<tr>
     <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.team||'')}" oninput="TL_BULK.rows[${i}].team=this.value"></td>
     <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.person||'')}" oninput="TL_BULK.rows[${i}].person=this.value"></td>
@@ -3822,7 +3852,6 @@ function renderTlRowsTable(){
     <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.tenure||'')}" oninput="TL_BULK.rows[${i}].tenure=this.value"></td>
     <td><input class="input num" style="padding:5px 6px;font-size:.78rem;width:60px" value="${esc(r.total??'')}" oninput="TL_BULK.rows[${i}].total=this.value"></td>
     ${subj.map((s,si)=>`<td><input class="input num" style="padding:5px 6px;font-size:.78rem;width:52px" value="${esc((r.scores&&r.scores[si])??'')}" oninput="TL_BULK.rows[${i}].scores[${si}]=this.value"></td>`).join('')}
-    <td><input class="input num" style="padding:5px 6px;font-size:.78rem;width:56px" value="${esc(r.percent??'')}" oninput="TL_BULK.rows[${i}].percent=this.value"></td>
     <td><select class="select" style="padding:5px 6px;font-size:.78rem" onchange="TL_BULK.rows[${i}].passed=(this.value==='1')">
       <option value="1" ${r.passed?'selected':''}>합격</option><option value="0" ${!r.passed?'selected':''}>불합격</option></select></td>
     <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.memo||'')}" oninput="TL_BULK.rows[${i}].memo=this.value"></td>
@@ -3858,17 +3887,17 @@ function applyTestPaste(){
   // 엑셀에서 표를 복사하면 맨 끝에 의도치 않은 빈 열이 함께 붙는 경우가 있어, 헤더 끝의 빈 칸은 잘라낸다
   const trimTrailingEmpty=arr=>{const a=arr.slice();while(a.length&&a[a.length-1]==='')a.pop();return a;};
   const header=trimTrailingEmpty(lines[0].split(sep).map(c=>c.replace(/^["']|["']$/g,'').trim()));
-  if(header.length<7){toast('열 개수를 확인해주세요 (팀·성명·사번·근속년수·총점수·과목...·백분율·통과여부 순서)');return;}
+  if(header.length<6){toast('열 개수를 확인해주세요 (팀·성명·사번·근속년수·총점수·과목...·통과여부 순서)');return;}
 
-  // 마지막 두 열은 원래 백분율·통과여부이지만, 혹시 이름이 붙어있으면 이름으로도 한 번 더 확인해서
-  // 백분율/통과여부 열이 과목으로 잘못 인식되지 않도록 한다
-  let percentIdx=header.length-2, passIdx=header.length-1;
-  const percentByName=header.map((h,i)=>({h,i})).filter(x=>/백분율|퍼센트/.test(x.h));
+  // 마지막 열은 원래 통과여부이지만, 혹시 이름이 붙어있으면 이름으로도 한 번 더 확인
+  let passIdx=header.length-1;
   const passByName=header.map((h,i)=>({h,i})).filter(x=>/통과|합격.?여부/.test(x.h));
-  if(percentByName.length)percentIdx=percentByName[percentByName.length-1].i;
   if(passByName.length)passIdx=passByName[passByName.length-1].i;
-  const subjEnd=Math.min(percentIdx,passIdx);
-  const subjects=header.slice(5,subjEnd>5?subjEnd:header.length-2);
+  // 백분율은 더 이상 쓰지 않지만, 예전 형식(백분율 열 포함)을 붙여넣어도 과목으로 잘못 섞이지 않도록 건너뜀
+  const percentIdxs=new Set(header.map((h,i)=>({h,i})).filter(x=>/백분율|퍼센트/.test(x.h)).map(x=>x.i));
+  const subjIdxs=[];
+  for(let i=5;i<passIdx;i++){if(!percentIdxs.has(i))subjIdxs.push(i);}
+  const subjects=subjIdxs.map(i=>header[i]);
 
   const rows=[];
   for(let i=1;i<lines.length;i++){
@@ -3879,7 +3908,7 @@ function applyTestPaste(){
     const total=cols[4]??'';
     const passRaw=tlNormPass(cols[passIdx]);
     rows.push({team:cols[0]||'',person,empNo:cols[2]||'',tenure:cols[3]||'',total,
-      scores:subjects.map((_,si)=>cols[5+si]??''),percent:cols[percentIdx]??'',
+      scores:subjIdxs.map(idx=>cols[idx]??''),
       passed:passRaw===null?true:passRaw});
   }
   if(!rows.length){toast('인식된 행이 없습니다 — 첫 줄(헤더)을 포함해 붙여넣었는지 확인해주세요');return;}
@@ -3908,7 +3937,6 @@ function saveTestBulk(){
       Object.assign(rec,{role,testName,date,person:r.person.trim(),empNo:(r.empNo||'').trim(),
         store:(r.team||'').trim(),tenure:(r.tenure||'').trim(),
         score:r.total===''?'':Math.max(0,Math.min(100,+r.total||0)),
-        percent:r.percent===''?'':(+r.percent||0),
         passed:!!r.passed,subjects:buildSubj(r),memo:(r.memo||'').trim()});
       newRecs.push(rec);
     }
@@ -3917,7 +3945,6 @@ function saveTestBulk(){
       const rec={id:'tl'+Date.now()+'_'+i,role,testName,date,
         person:r.person.trim(),empNo:(r.empNo||'').trim(),store:(r.team||'').trim(),tenure:(r.tenure||'').trim(),
         score:r.total===''?'':Math.max(0,Math.min(100,+r.total||0)),
-        percent:r.percent===''?'':(+r.percent||0),
         passed:!!r.passed,subjects:buildSubj(r),memo:(r.memo||'').trim()};
       DB.testRecords.push(rec);
       newRecs.push(rec);
