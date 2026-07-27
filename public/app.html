@@ -723,6 +723,19 @@ if(session){
   setTimeout(()=>syncFromSupabase().then(()=>render()),200);
 }
 
+// 화면을 계속 켜두고 있어도 다른 사람이 입력한 내용이 자동으로 반영되도록 주기적으로 동기화
+// (입력창에 뭔가 입력 중일 때는 화면을 다시 그리지 않고, 다음 주기에 반영되도록 건너뜀)
+const AUTO_REFRESH_MS=30000;
+setInterval(()=>{
+  if(!session)return;
+  const el=document.activeElement;
+  const typing=el&&/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+  syncFromSupabase().then(()=>{
+    if(typing)return; // 입력 중에는 화면을 건드리지 않음 — 다음 주기에 자동 반영됨
+    render();
+  });
+},AUTO_REFRESH_MS);
+
 // 전역 Ctrl+V 핸들러
 window.addEventListener('paste', function(e){
   const items = e.clipboardData?.items || [];
@@ -3530,9 +3543,12 @@ function vTestLog(){
   const passN=allRows.filter(r=>r.passed).length;
   const avgScore=totalN?avg(allRows.map(r=>+r.score||0)):0;
 
+  const nameArgTop=JSON.stringify(TL_TEST).replace(/"/g,'&quot;');
   const backBar=`<div class="row" style="margin-bottom:12px;gap:10px;align-items:center;flex-wrap:wrap">
     <button class="btn sm" onclick="TL_TEST=null;TL_Q='';render()">← 테스트 목록으로</button>
     <div class="card-title" style="margin:0">${esc(TL_TEST)}</div>
+    <button class="btn sm ghost" onclick="renameTestGroup('${TL_ROLE}',${nameArgTop})">✎ 이름 수정</button>
+    <button class="btn sm ghost" onclick="exportTestCSV('${TL_ROLE}',${nameArgTop})">⬇ 엑셀(CSV) 내보내기</button>
   </div>`;
 
   const summary=`<div class="grid g3" style="margin-bottom:14px">
@@ -3670,7 +3686,7 @@ function closeTlInline(){
 function updateTestField(id,field,value){
   const rec=DB.testRecords.find(r=>r.id===id);if(!rec)return;
   if(field==='score'||field==='percent'){
-    rec[field]=value===''?'':Math.max(0,+value||0);
+    rec[field]=value===''?'':Math.max(0,Math.min(100,+value||0)); // 0~100 범위로 제한
   }else if(field==='passed'){
     rec.passed=(value==='1');
   }else{
@@ -3687,6 +3703,29 @@ function updateTestSubject(id,name,value){
   s.score=value===''?'':(+value||0);
   save();sbUpsertTestRecord(rec);
   toast('저장되었습니다');
+}
+function renameTestGroup(role,testName){
+  const name=(prompt('테스트명 전체를 한 번에 수정합니다 (이 테스트에 속한 모든 인원에게 적용됩니다)',testName)||'').trim();
+  if(!name||name===testName)return;
+  const targets=DB.testRecords.filter(r=>r.role===role&&(r.testName||'(이름 없음)')===testName);
+  if(!targets.length){toast('대상 기록이 없습니다');return;}
+  targets.forEach(r=>{r.testName=name;sbUpsertTestRecord(r);});
+  save();
+  TL_TEST=name;
+  render();
+  toast(`${targets.length}건의 테스트명을 '${name}'(으)로 수정했습니다`);
+}
+function exportTestCSV(role,testName){
+  const targets=DB.testRecords.filter(r=>r.role===role&&(r.testName||'(이름 없음)')===testName);
+  if(!targets.length){toast('내보낼 데이터가 없습니다');return;}
+  const subjNames=[];
+  targets.forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
+  const header=['팀','성명','사번','근속','응시일','총점수',...subjNames,'백분율','통과여부','비고'];
+  const rows=[header,...targets.map(r=>{
+    const subjVals=subjNames.map(sn=>{const s=(r.subjects||[]).find(x=>x.name===sn);return (s&&s.score!==''&&s.score!=null)?s.score:'';});
+    return [r.store||'',r.person||'',r.empNo||'',r.tenure||'',r.date||'',r.score??'',...subjVals,r.percent??'',r.passed?'합격':'불합격',r.memo||''];
+  })];
+  csv(rows,`테스트결과_${testName}.csv`);
 }
 function addGroupSubject(role,testName){
   const name=(prompt('추가할 과목명을 입력해주세요')||'').trim();
@@ -3946,8 +3985,12 @@ async function syncTestRecords(){
 let LT_TAB=null; // 선택된 탭 id
 function ltTabs(){
   DB.linkTabs=DB.linkTabs||[];
-  if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
-  return DB.linkTabs;
+  if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[],order:0}];
+  // order가 없는(예전 데이터) 탭은 배열에 있는 순서 그대로 번호를 매겨줌
+  let changed=false;
+  DB.linkTabs.forEach((t,i)=>{if(t.order==null){t.order=i;changed=true;}});
+  if(changed)save();
+  return DB.linkTabs.slice().sort((a,b)=>(a.order??0)-(b.order??0));
 }
 function ltCurrentTab(){
   const tabs=ltTabs();
@@ -3958,7 +4001,8 @@ function addLinkTab(){
   const name=(prompt('새 탭 이름을 입력해주세요')||'').trim();
   if(!name)return;
   const id='lt'+Date.now()+Math.random().toString(36).slice(2,6);
-  const tab={id,name,links:[]};
+  const order=ltTabs().length;
+  const tab={id,name,links:[],order};
   DB.linkTabs.push(tab);
   LT_TAB=id;
   save();render();
@@ -3982,10 +4026,21 @@ function deleteLinkTab(id){
   sbDeleteLinkTab(id);
   sbRecordDeletion('link_tab',id); // 다른 브라우저에서도 이 삭제를 알 수 있도록 서버에 기록
 }
+function moveLinkTab(id,dir){
+  const tabs=ltTabs(); // order 기준 정렬된 목록
+  const idx=tabs.findIndex(t=>t.id===id);
+  const swapIdx=idx+dir;
+  if(idx<0||swapIdx<0||swapIdx>=tabs.length)return;
+  const a=tabs[idx],b=tabs[swapIdx];
+  const tmp=a.order;a.order=b.order;b.order=tmp;
+  save();render();
+  sbUpsertLinkTab(a);sbUpsertLinkTab(b);
+}
 function addLink(tabId){
   const tab=DB.linkTabs.find(t=>t.id===tabId);if(!tab)return;
   tab.links=tab.links||[];
-  tab.links.push({id:'lk'+Date.now()+Math.random().toString(36).slice(2,6),title:'',url:''});
+  const order=tab.links.length;
+  tab.links.push({id:'lk'+Date.now()+Math.random().toString(36).slice(2,6),title:'',url:'',order});
   save();render();
   sbUpsertLinkTab(tab);
 }
@@ -4004,12 +4059,23 @@ function deleteLink(tabId,linkId){
   save();render();
   sbUpsertLinkTab(tab);
 }
+function moveLink(tabId,linkId,dir){
+  const tab=DB.linkTabs.find(t=>t.id===tabId);if(!tab)return;
+  const links=(tab.links||[]).slice().sort((a,b)=>(a.order??0)-(b.order??0));
+  links.forEach((l,i)=>{if(l.order==null)l.order=i;});
+  const idx=links.findIndex(l=>l.id===linkId);
+  const swapIdx=idx+dir;
+  if(idx<0||swapIdx<0||swapIdx>=links.length)return;
+  const tmp=links[idx].order;links[idx].order=links[swapIdx].order;links[swapIdx].order=tmp;
+  save();render();
+  sbUpsertLinkTab(tab);
+}
 function sbUpsertLinkTab(tab){
   try{
     fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/link_tabs',{
       method:'POST',
       headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
-      body:JSON.stringify({id:tab.id,name:tab.name,links:tab.links||[]})
+      body:JSON.stringify({id:tab.id,name:tab.name,links:tab.links||[],sort_order:tab.order??0})
     });
   }catch(e){}
 }
@@ -4034,11 +4100,11 @@ async function syncLinkTabs(){
     rows.forEach(row=>{
       if(delSet.has(row.id))return; // 이 브라우저에서 이미 삭제한 탭은 다시 불러오지 않음
       const existing=DB.linkTabs.find(t=>t.id===row.id);
-      const mapped={id:row.id,name:row.name||'',links:row.links||[]};
+      const mapped={id:row.id,name:row.name||'',links:row.links||[],order:row.sort_order??0};
       if(existing)Object.assign(existing,mapped);
       else DB.linkTabs.push(mapped);
     });
-    if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
+    if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[],order:0}];
     save();
   }catch(e){console.warn('링크관리 동기화 오류:',e);}
 }
@@ -4047,20 +4113,26 @@ function vLinks(){
   const cur=ltCurrentTab();
 
   const tabBar=`<div class="row" style="gap:6px;margin-bottom:14px;flex-wrap:wrap">
-    ${tabs.map(t=>{
+    ${tabs.map((t,ti)=>{
       const on=t.id===cur.id;
       return `<span class="btn ${on?'primary':''} sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px" onclick="LT_TAB='${t.id}';render()">
+        ${on&&ti>0?`<span style="cursor:pointer;opacity:.85" title="왼쪽으로 이동" onclick="event.stopPropagation();moveLinkTab('${t.id}',-1)">◀</span>`:''}
         ${esc(t.name)}
+        ${on&&ti<tabs.length-1?`<span style="cursor:pointer;opacity:.85" title="오른쪽으로 이동" onclick="event.stopPropagation();moveLinkTab('${t.id}',1)">▶</span>`:''}
         ${on?`<span style="cursor:pointer;opacity:.85" title="탭 이름 수정" onclick="event.stopPropagation();renameLinkTab('${t.id}')">✎</span><span style="cursor:pointer;opacity:.85" title="탭 삭제" onclick="event.stopPropagation();deleteLinkTab('${t.id}')">✕</span>`:''}
       </span>`;
     }).join('')}
     <button class="btn sm" onclick="addLinkTab()">＋ 탭 추가</button>
   </div>`;
 
-  const links=cur.links||[];
-  const list=links.length?links.map(l=>`
+  const links=(cur.links||[]).slice().sort((a,b)=>(a.order??0)-(b.order??0));
+  const list=links.length?links.map((l,li)=>`
     <div class="card" style="margin-bottom:10px">
       <div class="card-pad" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="display:inline-flex;flex-direction:column;gap:0;color:var(--ink4)">
+          <span style="cursor:${li>0?'pointer':'default'};opacity:${li>0?1:.25};font-size:.7rem" title="위로 이동" onclick="${li>0?`moveLink('${cur.id}','${l.id}',-1)`:''}">▲</span>
+          <span style="cursor:${li<links.length-1?'pointer':'default'};opacity:${li<links.length-1?1:.25};font-size:.7rem" title="아래로 이동" onclick="${li<links.length-1?`moveLink('${cur.id}','${l.id}',1)`:''}">▼</span>
+        </span>
         <input class="input" style="flex:1;min-width:160px" placeholder="링크 이름" value="${esc(l.title||'')}" onchange="updateLink('${cur.id}','${l.id}','title',this.value)">
         <input class="input" style="flex:2;min-width:220px" placeholder="https://..." value="${esc(l.url||'')}" onchange="updateLink('${cur.id}','${l.id}','url',this.value)">
         <a class="btn sm" href="${esc(l.url||'#')}" target="_blank" rel="noopener"${l.url?'':' onclick="return false;"'}>열기 ↗</a>
