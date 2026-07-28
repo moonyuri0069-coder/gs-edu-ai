@@ -293,6 +293,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 </head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <body>
 <div id="app"></div>
 <div class="toast" id="toast"></div>
@@ -3572,35 +3573,63 @@ function openFormLinkModal(){
 }
 function flSetSource(src){FL_DRAFT.source=src;renderFormLinkModal();}
 function renderFlColsTable(){
-  const kindOpts=[['ignore','제외'],['name','이름'],['empNo','사번'],['store','팀/점포'],['tenure','근속'],['date','응시일'],
-    ['totalScore','총점수(직접입력)'],['subjectScore','과목점수(직접입력)'],['question','채점문항(정답으로 자동채점)']];
-  return `<div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:8px">
-    <table class="tbl"><thead><tr><th>시트 열</th><th>역할</th><th>과목</th><th>세부항목</th><th>정답</th><th>배점</th></tr></thead>
+  const kindOpts=[['ignore','제외'],['name','이름'],['empNo','사번/이메일'],['store','팀/점포'],['tenure','근속'],['date','응시일'],
+    ['totalScore','총점수(직접입력)'],['subjectScore','과목점수(직접입력)'],
+    ['question','채점문항(정답과 비교해 자동채점)'],['scoredQuestion','채점된 문항(점수 열이 이미 있음)']];
+  const otherHeaders=FL_DRAFT.cols.map(c=>c.header);
+  return `<div style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:8px">
+    <table class="tbl"><thead><tr><th>시트 열</th><th>역할</th><th>과목</th><th>세부항목</th><th>정답 / 원본응답 열</th><th>배점(만점)</th></tr></thead>
     <tbody>${FL_DRAFT.cols.map((c,i)=>`<tr>
       <td style="max-width:200px;font-size:.76rem;word-break:break-all">${esc(c.header)}</td>
       <td><select class="select" style="font-size:.76rem;padding:3px 4px" onchange="FL_DRAFT.cols[${i}].kind=this.value;renderFormLinkModal()">
         ${kindOpts.map(([v,l])=>`<option value="${v}" ${c.kind===v?'selected':''}>${l}</option>`).join('')}
       </select></td>
-      <td>${(c.kind==='question'||c.kind==='subjectScore')?`<input class="input" style="font-size:.76rem;padding:3px 4px;width:84px" value="${esc(c.subject||'')}" placeholder="과목명" onchange="FL_DRAFT.cols[${i}].subject=this.value">`:''}</td>
-      <td>${c.kind==='question'?`<input class="input" style="font-size:.76rem;padding:3px 4px;width:84px" value="${esc(c.subItem||'')}" placeholder="세부항목" onchange="FL_DRAFT.cols[${i}].subItem=this.value">`:''}</td>
-      <td>${c.kind==='question'?`<input class="input" style="font-size:.76rem;padding:3px 4px;width:100px" value="${esc(c.answer||'')}" placeholder="정답(선택)" onchange="FL_DRAFT.cols[${i}].answer=this.value">`:''}</td>
-      <td>${c.kind==='question'?`<input class="input num" style="font-size:.76rem;padding:3px 4px;width:44px" value="${c.points??1}" onchange="FL_DRAFT.cols[${i}].points=+this.value||0">`:''}</td>
+      <td>${(c.kind==='question'||c.kind==='scoredQuestion'||c.kind==='subjectScore')?`<input class="input" style="font-size:.76rem;padding:3px 4px;width:84px" value="${esc(c.subject||'')}" placeholder="과목명" onchange="FL_DRAFT.cols[${i}].subject=this.value">`:''}</td>
+      <td>${(c.kind==='question'||c.kind==='scoredQuestion')?`<input class="input" style="font-size:.76rem;padding:3px 4px;width:84px" value="${esc(c.subItem||'')}" placeholder="세부항목" onchange="FL_DRAFT.cols[${i}].subItem=this.value">`:''}</td>
+      <td>${c.kind==='question'?`<input class="input" style="font-size:.76rem;padding:3px 4px;width:100px" value="${esc(c.answer||'')}" placeholder="정답(선택)" onchange="FL_DRAFT.cols[${i}].answer=this.value">`
+        :c.kind==='scoredQuestion'?`<select class="select" style="font-size:.76rem;padding:3px 4px" onchange="FL_DRAFT.cols[${i}].linkedHeader=this.value">
+          <option value="">(원본 응답 없음)</option>
+          ${otherHeaders.filter(h=>h!==c.header).map(h=>`<option value="${esc(h)}" ${c.linkedHeader===h?'selected':''}>${esc(h)}</option>`).join('')}
+        </select>`:''}</td>
+      <td>${(c.kind==='question'||c.kind==='scoredQuestion')?`<input class="input num" style="font-size:.76rem;padding:3px 4px;width:44px" value="${c.points??1}" onchange="FL_DRAFT.cols[${i}].points=+this.value||0">`:''}</td>
     </tr>`).join('')}</tbody></table></div>
-    <div class="card-sub" style="margin-top:6px">이미 점수가 계산되어 있는 표라면 "총점수(직접입력)"·"과목점수(직접입력)"를 사용하시고, 문항별 정답과 비교해 자동채점하려면 "채점문항"을 사용하세요. 두 방식을 한 표 안에서 섞어 써도 됩니다.</div>`;
+    <div class="card-sub" style="margin-top:6px">이미 점수가 계산되어 있는 표라면 "총점수/과목점수(직접입력)"를, 정답과 비교해 우리 앱이 채점해야 하면 "채점문항"을, 구글폼·MS폼즈가 이미 문항별로 점수를 매겨서 내보낸 표(예: "점수 - 문항명" 열)라면 "채점된 문항"을 사용하세요. 한 표 안에서 섞어 써도 됩니다. 사번 열이 없다면 이메일 열을 "사번/이메일" 역할로 지정해 개인 식별에 사용할 수 있어요.</div>`;
 }
-function flApplyHeader(header){
+// header: 열 제목 배열, rows: (있으면) 전체 데이터 — 점수 열의 만점을 실제 데이터에서 추정하는 데 사용
+function flApplyHeader(header,rows){
   const oldCols=FL_DRAFT.cols||[];
-  FL_DRAFT.cols=header.map(h=>{
+  const dataRows=rows?rows.slice(1):null;
+  FL_DRAFT.cols=header.map((h,hi)=>{
     const prev=oldCols.find(c=>c.header===h);
     if(prev)return prev;
-    let kind='question';
-    if(/타임스탬프|timestamp/i.test(h))kind='date';
-    else if(/이름|성명/.test(h))kind='name';
-    else if(/사번/.test(h))kind='empNo';
-    else if(/근속/.test(h))kind='tenure';
-    else if(/팀|점포|매장|지점/.test(h))kind='store';
-    else if(/^총점수$|^총점$|^점수$/.test(h))kind='totalScore';
-    return{header:h,kind,subject:'',subItem:'',answer:'',points:1};
+    let kind='question',linkedHeader='',points=1;
+    const hh=String(h||'');
+    if(/^ID$/i.test(hh)||/^(시작 시간|완료 시간|퀴즈 피드백)$/.test(hh))kind='ignore';
+    else if(/^피드백\s*-\s*/.test(hh))kind='ignore'; // 구글폼/MS폼즈가 붙이는 문항별 서술형 피드백 열은 기본 제외
+    else if(/^점수\s*-\s*/.test(hh)){
+      // "점수 - 문항명" 형태: MS폼즈/구글폼 애드온이 이미 채점해서 내보낸 열
+      kind='scoredQuestion';
+      const qName=hh.replace(/^점수\s*-\s*/,'');
+      if(header.includes(qName))linkedHeader=qName;
+      if(dataRows){
+        const vals=dataRows.map(r=>+r[hi]||0).filter(v=>!isNaN(v));
+        if(vals.length)points=Math.max(1,Math.max(...vals));
+      }
+    }
+    else if(/타임스탬프|timestamp/i.test(hh)&&hh.length<=15)kind='date';
+    // 이름/사번/팀 등은 열 제목이 짧을 때만(=진짜 열 이름일 때만) 인식 — 길이가 긴 문항 텍스트 안에
+    // "점포", "팀" 같은 단어가 우연히 들어있는 경우(예: "다음 중 점포 재무제표에 관한...") 오분류되는 것을 방지
+    else if(hh.length<=15&&/이름|성명/.test(hh))kind='name';
+    else if(hh.length<=15&&/사번/.test(hh))kind='empNo';
+    else if(hh.length<=20&&/전자\s*메일|이메일|e-?mail/i.test(hh))kind='empNo'; // 사번이 없는 표에서는 이메일을 식별자로 사용
+    else if(hh.length<=15&&/근속/.test(hh))kind='tenure';
+    else if(hh.length<=15&&/팀|점포|매장|지점/.test(hh))kind='store';
+    else if(/^총\s*점수$|^총점$/.test(hh))kind='totalScore';
+    else if(header.includes('점수 - '+hh)||header.includes('점수-'+hh)){
+      // 이 열이 "점수 - X" 형태의 짝을 가진 원본 문항 텍스트 열이면, 점수 열이 채점을 담당하므로 이 열은 기본 제외
+      kind='ignore';
+    }
+    return{header:h,kind,subject:'',subItem:'',answer:'',points,linkedHeader};
   });
 }
 // 구글 Apps Script 웹훅 코드 — 구글폼에 연결하면 응답 제출 즉시 Supabase로 전송됨
@@ -3656,16 +3685,16 @@ function renderFormLinkModal(){
       <textarea class="input" id="flPasteArea" rows="6" placeholder="타임스탬프    이름    사번    문항1    문항2 ...&#10;(엑셀에서 헤더 포함 범위를 선택해 복사한 뒤 여기에 붙여넣어주세요)" style="font-family:monospace;font-size:.78rem;white-space:pre">${esc(FL_DRAFT._pasteText||'')}</textarea></div>
       <button class="btn sm" onclick="flLoadFromPaste()">① 표 읽어오기</button>`;
   }else if(src==='file'){
-    sourceBlock=`<div class="fld-group"><label class="fld">CSV 파일 업로드</label>
-      <input type="file" id="flFileInput" accept=".csv,text/csv" onchange="flFileSelected(this)">
-      <div class="card-sub" style="margin-top:4px">엑셀/구글폼 응답을 "CSV(쉼표로 구분)" 형식으로 저장한 뒤 업로드해주세요. (.xlsx는 지원되지 않아요 — CSV로 다시 저장해주세요)</div></div>`;
+    sourceBlock=`<div class="fld-group"><label class="fld">엑셀(.xlsx) 또는 CSV 파일 업로드</label>
+      <input type="file" id="flFileInput" accept=".csv,.xlsx,.xls,text/csv" onchange="flFileSelected(this)">
+      <div class="card-sub" style="margin-top:4px">구글폼/MS폼즈에서 내려받은 엑셀(.xlsx) 응답 파일을 그대로 올리시면 됩니다. 첫 번째 시트의 첫 줄을 열 제목으로 인식해요.</div></div>`;
   }else{
     sourceBlock=`<div class="fld-group"><label class="fld">공개 CSV 링크 (고급)</label>
       <input class="input" id="flCsvUrl" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" value="${esc(FL_DRAFT.csvUrl||'')}" onchange="FL_DRAFT.csvUrl=this.value.trim()">
       <div class="card-sub" style="margin-top:4px">구글시트를 [파일 → 공유 → 웹에 게시]로 CSV 공개 링크를 만든 경우에만 사용 — 회사 정책으로 막혀 있으면 웹훅/붙여넣기/업로드 방식을 이용해주세요.</div></div>
       <button class="btn sm" onclick="flLoadHeaders()">① 열 불러오기</button>`;
   }
-  const body=`<div class="row" style="gap:6px;margin-bottom:12px;flex-wrap:wrap">${tabBtn('webhook','🪝 실시간 웹훅 (추천)')}${tabBtn('paste','📋 표 붙여넣기')}${tabBtn('file','📁 CSV 파일 업로드')}${tabBtn('url','🔗 공개 CSV 링크')}</div>
+  const body=`<div class="row" style="gap:6px;margin-bottom:12px;flex-wrap:wrap">${tabBtn('webhook','🪝 실시간 웹훅 (추천)')}${tabBtn('paste','📋 표 붙여넣기')}${tabBtn('file','📁 엑셀/CSV 파일 업로드')}${tabBtn('url','🔗 공개 CSV 링크')}</div>
     ${sourceBlock}
     ${FL_DRAFT.cols.length?`<div class="card-sub" style="margin:10px 0 0">열 ${FL_DRAFT.cols.length}개 — 아래에서 각 열의 역할을 지정해주세요</div>`+renderFlColsTable():''}
     ${FL_DRAFT.cols.length?`<div class="fld-group" style="margin-top:10px"><label class="fld">합격 기준(총점, 점 이상이면 합격)</label>
@@ -3691,7 +3720,7 @@ async function flLoadWebhookSample(){
     if(!rows||!rows.length){toast('아직 수신된 응답이 없습니다 — 구글폼에 테스트 응답을 1건 제출해보고 다시 눌러주세요');return;}
     const header=Object.keys(rows[0].data||{});
     if(!header.length){toast('수신 데이터에 문항이 없습니다');return;}
-    flApplyHeader(header);
+    flApplyHeader(header,[header,...rows.map(r=>header.map(h=>r.data&&r.data[h]!=null?String(r.data[h]):''))]);
     toast(`최근 응답에서 열 ${header.length}개를 확인했습니다 — 각 열의 역할을 지정해주세요`);
     renderFormLinkModal();
   }catch(e){
@@ -3701,7 +3730,7 @@ async function flLoadWebhookSample(){
 }
 async function flSaveWebhookAndSync(){
   if(!FL_DRAFT.cols.length){toast('먼저 "① 최근 수신 응답 확인"으로 열을 불러와주세요');return;}
-  if(!FL_DRAFT.cols.some(c=>c.kind==='question')){toast('채점(또는 응답 기록)할 문항 열을 1개 이상 지정해주세요');return;}
+  if(!FL_DRAFT.cols.some(c=>c.kind==='question'||c.kind==='scoredQuestion'||c.kind==='totalScore'||c.kind==='subjectScore')){toast('채점/점수 관련 열을 1개 이상 지정해주세요(채점문항/채점된 문항/총점수/과목점수 중 하나)');return;}
   if(!FL_DRAFT.cols.some(c=>c.kind==='name'||c.kind==='empNo')){toast('이름 또는 사번 열을 최소 1개 지정해주세요');return;}
   DB.formLinks=(DB.formLinks||[]).filter(f=>f.id!==FL_DRAFT.id);
   const cfgToSave=Object.assign({},FL_DRAFT);
@@ -3728,7 +3757,7 @@ function flLoadFromPaste(){
   if(!text||!text.trim()){toast('붙여넣을 표 내용이 없습니다');return;}
   const rows=parsePastedTable(text);
   if(!rows.length){toast('표 내용을 인식하지 못했습니다 — 첫 줄에 열 제목이 포함되어 있는지 확인해주세요');return;}
-  flApplyHeader(rows[0]);
+  flApplyHeader(rows[0],rows);
   FL_DRAFT._rows=rows;
   toast(`열 ${rows[0].length}개를 읽어왔습니다 — 각 열의 역할을 지정해주세요`);
   renderFormLinkModal();
@@ -3736,19 +3765,35 @@ function flLoadFromPaste(){
 function flFileSelected(input){
   const file=input.files&&input.files[0];
   if(!file)return;
+  const isExcel=/\.xlsx?$/i.test(file.name);
   const reader=new FileReader();
   reader.onload=()=>{
-    const text=String(reader.result||'');
-    const rows=parseCSV(text,',');
-    if(!rows.length){toast('CSV 내용을 인식하지 못했습니다');return;}
-    flApplyHeader(rows[0]);
+    let rows;
+    try{
+      if(isExcel){
+        if(typeof XLSX==='undefined')throw new Error('xlsx lib missing');
+        const wb=XLSX.read(new Uint8Array(reader.result),{type:'array'});
+        const sheet=wb.Sheets[wb.SheetNames[0]];
+        rows=XLSX.utils.sheet_to_json(sheet,{header:1,raw:false,defval:''}).map(r=>r.map(v=>v==null?'':String(v)));
+        rows=rows.filter(r=>r.some(v=>v!==''));
+      }else{
+        rows=parseCSV(String(reader.result||''),',');
+      }
+    }catch(e){
+      console.error(e);
+      toast('파일을 읽는 중 오류가 발생했습니다');
+      return;
+    }
+    if(!rows.length){toast('파일 내용을 인식하지 못했습니다');return;}
+    flApplyHeader(rows[0],rows);
     FL_DRAFT._rows=rows;
     FL_DRAFT._fileName=file.name;
     toast(`"${file.name}"에서 열 ${rows[0].length}개를 읽어왔습니다 — 각 열의 역할을 지정해주세요`);
     renderFormLinkModal();
   };
   reader.onerror=()=>toast('파일을 읽지 못했습니다');
-  reader.readAsText(file,'UTF-8');
+  if(isExcel)reader.readAsArrayBuffer(file);
+  else reader.readAsText(file,'UTF-8');
 }
 async function flLoadHeaders(){
   const urlEl=document.getElementById('flCsvUrl');
@@ -3761,7 +3806,7 @@ async function flLoadHeaders(){
     const text=await res.text();
     const rows=parseCSV(text,',');
     if(!rows.length)throw new Error('empty');
-    flApplyHeader(rows[0]);
+    flApplyHeader(rows[0],rows);
     FL_DRAFT._rows=rows; // 바로 이어서 "가져오기 실행"할 때 재요청하지 않도록 캐시
     toast(`열 ${rows[0].length}개를 불러왔습니다 — 각 열의 역할을 지정해주세요`);
     renderFormLinkModal();
@@ -3787,7 +3832,15 @@ function flGradeAndUpsert(cfg,getVal){
     else if(c.kind==='subjectScore'){if(val!=='')subjectsDirect.push({name:c.subject||c.header,score:+val||0});}
     else if(c.kind==='question'){
       const isCorrect=c.answer?(val===String(c.answer).trim()):null;
-      items.push({q:c.header,subject:c.subject||'기타',subItem:c.subItem||'',answer:val,correctAnswer:c.answer||'',points:c.points??1,isCorrect});
+      items.push({q:c.header,subject:c.subject||'기타',subItem:c.subItem||'',answer:val,correctAnswer:c.answer||'',points:c.points??1,isCorrect,gotPoints:null});
+    }
+    else if(c.kind==='scoredQuestion'){
+      // 구글폼/MS폼즈가 이미 채점해서 점수만 내려준 문항 — 이 열 값 자체가 획득 점수
+      if(val==='')return;
+      const got=+val||0;
+      const max=c.points||1;
+      const displayAnswer=c.linkedHeader?(getVal(c.linkedHeader)||'').trim():val;
+      items.push({q:c.header,subject:c.subject||'기타',subItem:c.subItem||'',answer:displayAnswer,correctAnswer:'',points:max,isCorrect:got>=max,gotPoints:got});
     }
   });
   if(!person&&!empNo)return false;
@@ -3799,7 +3852,13 @@ function flGradeAndUpsert(cfg,getVal){
   const bySubj={};
   items.forEach(it=>{
     if(!bySubj[it.subject])bySubj[it.subject]={got:0,max:0};
-    if(it.correctAnswer){bySubj[it.subject].max+=(it.points||1);if(it.isCorrect)bySubj[it.subject].got+=(it.points||1);}
+    if(it.correctAnswer){ // 정답과 비교해 자동채점한 문항
+      bySubj[it.subject].max+=(it.points||1);
+      if(it.isCorrect)bySubj[it.subject].got+=(it.points||1);
+    }else if(it.gotPoints!=null){ // 이미 채점되어 점수만 들어온 문항 (예: MS폼즈 "점수 - 문항" 열)
+      bySubj[it.subject].max+=(it.points||1);
+      bySubj[it.subject].got+=it.gotPoints;
+    }
   });
   const gradedSubjects=Object.keys(bySubj).map(name=>({name,score:bySubj[name].max?Math.round(bySubj[name].got/bySubj[name].max*100):''}));
   const subjects=[...gradedSubjects,...subjectsDirect];
@@ -3818,7 +3877,7 @@ function flGradeAndUpsert(cfg,getVal){
   return true;
 }
 async function flImportRun(){
-  if(!FL_DRAFT.cols.some(c=>c.kind==='question')){toast('채점(또는 응답 기록)할 문항 열을 1개 이상 지정해주세요');return;}
+  if(!FL_DRAFT.cols.some(c=>c.kind==='question'||c.kind==='scoredQuestion'||c.kind==='totalScore'||c.kind==='subjectScore')){toast('채점/점수 관련 열을 1개 이상 지정해주세요(채점문항/채점된 문항/총점수/과목점수 중 하나)');return;}
   if(!FL_DRAFT.cols.some(c=>c.kind==='name'||c.kind==='empNo')){toast('이름 또는 사번 열을 최소 1개 지정해주세요');return;}
   toast('응답을 불러와 채점하는 중...');
   try{
@@ -3891,9 +3950,10 @@ function renderRecordDetailModal(rec){
   items.forEach(it=>{(bySubj[it.subject]=bySubj[it.subject]||[]).push(it);});
   const subjBlocks=Object.keys(bySubj).map(sn=>{
     const list=bySubj[sn];
-    const correct=list.filter(x=>x.isCorrect===true).length;
-    const graded=list.filter(x=>x.correctAnswer).length;
-    const scorePct=graded?Math.round(correct/graded*100):null;
+    // 이 과목의 정확한 점수는 이미 채점 시 rec.subjects에 계산되어 있으므로(배점이 문항마다 다를 수 있어
+    // 단순히 "맞힌 문항 수/전체 문항 수"로 다시 세면 틀릴 수 있음) 그 값을 그대로 사용
+    const subjRec=(rec.subjects||[]).find(s=>s.name===sn);
+    const scorePct=(subjRec&&subjRec.score!==''&&subjRec.score!=null)?Math.round(+subjRec.score):null;
     const w=scorePct!=null?weakLabel(scorePct):null;
     return `<div style="margin-bottom:12px">
       <div style="font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${esc(sn)}
@@ -3951,11 +4011,12 @@ async function runAiIndividualReport(id){
   const subjLines=Object.keys(bySubj).map(sn=>{
     const list=bySubj[sn];
     const correct=list.filter(x=>x.isCorrect===true).length;
-    const graded=list.filter(x=>x.correctAnswer).length;
-    const p=graded?Math.round(correct/graded*100):null;
+    const graded=list.filter(x=>x.isCorrect!=null).length;
+    const subjRec=(rec.subjects||[]).find(s=>s.name===sn);
+    const p=(subjRec&&subjRec.score!==''&&subjRec.score!=null)?Math.round(+subjRec.score):null;
     return `- ${sn}: ${p!=null?p+'%':'-'} (정답 ${correct}/${graded})`;
   }).join('\n');
-  const wrongLines=items.filter(x=>x.isCorrect===false).map(x=>`- [${x.subject}${x.subItem?'/'+x.subItem:''}] ${x.q} → 응답:"${x.answer}" (정답:"${x.correctAnswer}")`).join('\n');
+  const wrongLines=items.filter(x=>x.isCorrect===false).map(x=>`- [${x.subject}${x.subItem?'/'+x.subItem:''}] ${x.q} → 응답:"${x.answer}"${x.correctAnswer?` (정답:"${x.correctAnswer}")`:''}`).join('\n');
   const prompt=`다음은 GS더프레시 "${rec.testName}" 테스트에서 응시자 "${rec.person}"(${rec.role})의 결과입니다.
 총점: ${rec.score}점
 
