@@ -3936,10 +3936,11 @@ function vTestLog(){
             <div class="card-title">${esc(name)}</div>
             <div class="card-sub">최근 응시일 ${esc(lastDate||'-')}</div>
           </div>
-          <div class="row" style="gap:14px;font-size:.85rem;color:var(--ink2);flex-wrap:wrap">
+          <div class="row" style="gap:14px;font-size:.85rem;color:var(--ink2);flex-wrap:wrap;align-items:center">
             <span>응시 <b class="num">${n}</b>명</span>
             <span>합격률 <b class="num" style="color:var(--green)">${pct(n?p/n*100:0)}</b></span>
             <span>평균 <b class="num">${f1(avgS)}</b>점</span>
+            <button class="btn sm ghost" style="padding:3px 8px" title="이 테스트 전체 삭제" onclick="deleteTestGroup('${TL_ROLE}',${nameArg},event)">🗑 전체삭제</button>
           </div>
         </div>
       </div>`;
@@ -3963,6 +3964,7 @@ function vTestLog(){
     <button class="btn sm ghost" onclick="renameTestGroup('${TL_ROLE}',${nameArgTop})">✎ 이름 수정</button>
     <button class="btn sm ghost" onclick="exportTestCSV('${TL_ROLE}',${nameArgTop})">⬇ 엑셀(CSV) 내보내기</button>
     <button class="btn sm ${flConfigFor(TL_ROLE,TL_TEST)?'primary':'ghost'}" onclick="openFormLinkModal()">📥 응답 가져오기${flConfigFor(TL_ROLE,TL_TEST)?' 완료':''}</button>
+    <button class="btn sm ghost" style="color:#be185d" onclick="deleteTestGroup('${TL_ROLE}',${nameArgTop})">🗑 이 테스트 전체 삭제</button>
   </div>`;
 
   const summary=`<div class="grid g3" style="margin-bottom:14px">
@@ -4348,6 +4350,30 @@ function deleteTestRecord(id){
   sbDeleteTestRecord(id);
   sbRecordDeletion('test_record',id); // 다른 브라우저에서도 이 삭제를 알 수 있도록 서버에 기록
   toast('테스트 결과가 삭제되었습니다');
+}
+// 카드(테스트명) 전체 삭제 — 그 테스트에 속한 모든 응시자 기록을 한 번에 삭제
+function deleteTestGroup(role,testName,ev){
+  if(ev)ev.stopPropagation(); // 카드 클릭(상세화면 진입) 이벤트로 번지지 않도록
+  const targets=(DB.testRecords||[]).filter(r=>r.role===role&&(r.testName||'(이름 없음)')===testName);
+  if(!targets.length)return;
+  if(!confirm(`"${testName}" 테스트의 응시 기록 ${targets.length}건을 모두 삭제하시겠습니까? 되돌릴 수 없습니다.`))return;
+  const ids=targets.map(r=>r.id);
+  DB.testRecords=(DB.testRecords||[]).filter(r=>!ids.includes(r.id));
+  DB.deletedTestRecordIds=DB.deletedTestRecordIds||[];
+  ids.forEach(id=>{
+    if(!DB.deletedTestRecordIds.includes(id))DB.deletedTestRecordIds.push(id);
+    sbDeleteTestRecord(id);
+    sbRecordDeletion('test_record',id);
+  });
+  // 이 테스트에 연결된 응답 가져오기(구글폼 등) 설정도 함께 정리
+  const cfg=flConfigFor(role,testName);
+  if(cfg){
+    DB.formLinks=(DB.formLinks||[]).filter(f=>f.id!==cfg.id);
+    sbDeleteFormLink(cfg.id);
+  }
+  if(TL_TEST===testName)TL_TEST=null;
+  save();render();
+  toast(`"${testName}" 테스트 기록 ${targets.length}건이 삭제되었습니다`);
 }
 
 /* ── Supabase 연동 (공유를 위해 test_records 테이블 사용 — 사전에 테이블 생성 필요) ── */
