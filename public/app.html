@@ -3512,8 +3512,9 @@ function weakLabel(score){
   if(score>=WEAK_THRESHOLDS.needsWork)return{label:'보완필요',emoji:'🟠',color:'#c2620a'};
   return{label:'취약',emoji:'🔴',color:'#be185d'};
 }
-// 아주 단순한 CSV 파서 (쉼표/따옴표/줄바꿈 포함 값 처리) — 구글시트 "웹에 게시" CSV를 그대로 읽기 위함
-function parseCSV(text){
+// 아주 단순한 구분자 기반 표 파서 (따옴표/줄바꿈 포함 값 처리) — CSV(쉼표) 또는 엑셀 복사(탭) 모두 지원
+function parseCSV(text,delim){
+  delim=delim||',';
   const rows=[];let row=[],field='',inQ=false;
   for(let i=0;i<text.length;i++){
     const c=text[i];
@@ -3522,7 +3523,7 @@ function parseCSV(text){
       else field+=c;
     }else{
       if(c==='"')inQ=true;
-      else if(c===','){row.push(field);field='';}
+      else if(c===delim){row.push(field);field='';}
       else if(c==='\r'){/*skip*/}
       else if(c==='\n'){row.push(field);rows.push(row);row=[];field='';}
       else field+=c;
@@ -3530,6 +3531,12 @@ function parseCSV(text){
   }
   if(field!==''||row.length){row.push(field);rows.push(row);}
   return rows.filter(r=>r.some(v=>v!==''));
+}
+// 붙여넣은 텍스트가 탭 구분(엑셀/구글시트에서 복사)인지 쉼표 구분(CSV)인지 자동 판별해서 파싱
+function parsePastedTable(text){
+  const firstLine=(text.split('\n')[0]||'');
+  const delim=firstLine.includes('\t')?'\t':',';
+  return parseCSV(text,delim);
 }
 // 구글폼 타임스탬프("2026. 7. 28 오전 10:12:33") 등을 YYYY-MM-DD로 변환 시도
 function flNormDate(v){
@@ -3539,15 +3546,17 @@ function flNormDate(v){
   return v;
 }
 
-let FL_DRAFT=null; // 구글폼 연동 설정 draft: {id,role,testName,csvUrl,cols:[{header,kind,subject,subItem,answer,points}],passCutoff}
+let FL_DRAFT=null; // 응답 가져오기 설정 draft: {id,role,testName,source:'paste'|'file'|'url',csvUrl,cols:[{header,kind,subject,subItem,answer,points}],passCutoff}
 function flConfigFor(role,testName){return (DB.formLinks||[]).find(f=>f.role===role&&f.testName===testName);}
 function openFormLinkModal(){
   if(!TL_TEST){toast('테스트를 먼저 선택해주세요');return;}
   const existing=flConfigFor(TL_ROLE,TL_TEST);
   FL_DRAFT=existing?JSON.parse(JSON.stringify(existing)):
-    {id:'fl'+Date.now()+Math.random().toString(36).slice(2,7),role:TL_ROLE,testName:TL_TEST,csvUrl:'',cols:[],passCutoff:60};
+    {id:'fl'+Date.now()+Math.random().toString(36).slice(2,7),role:TL_ROLE,testName:TL_TEST,source:'paste',csvUrl:'',cols:[],passCutoff:60};
+  if(!FL_DRAFT.source)FL_DRAFT.source='paste'; // 예전에 저장된 설정(항상 링크 방식)과의 호환
   renderFormLinkModal();
 }
+function flSetSource(src){FL_DRAFT.source=src;renderFormLinkModal();}
 function renderFlColsTable(){
   const kindOpts=[['ignore','제외'],['name','이름'],['empNo','사번'],['store','팀/점포'],['date','응시일'],['question','채점문항']];
   return `<div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:8px">
@@ -3563,23 +3572,77 @@ function renderFlColsTable(){
       <td>${c.kind==='question'?`<input class="input num" style="font-size:.76rem;padding:3px 4px;width:44px" value="${c.points??1}" onchange="FL_DRAFT.cols[${i}].points=+this.value||0">`:''}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
+function flApplyHeader(header){
+  const oldCols=FL_DRAFT.cols||[];
+  FL_DRAFT.cols=header.map(h=>{
+    const prev=oldCols.find(c=>c.header===h);
+    if(prev)return prev;
+    let kind='question';
+    if(/타임스탬프|timestamp/i.test(h))kind='date';
+    else if(/이름|성명/.test(h))kind='name';
+    else if(/사번/.test(h))kind='empNo';
+    else if(/팀|점포|매장|지점/.test(h))kind='store';
+    return{header:h,kind,subject:'',subItem:'',answer:'',points:1};
+  });
+}
 function renderFormLinkModal(){
   const cfgExists=!!flConfigFor(TL_ROLE,TL_TEST);
-  const body=`<div class="fld-group"><label class="fld">구글시트 공개 CSV 링크</label>
-    <input class="input" id="flCsvUrl" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" value="${esc(FL_DRAFT.csvUrl)}" onchange="FL_DRAFT.csvUrl=this.value.trim()">
-    <div class="card-sub" style="margin-top:4px">응답이 쌓이는 구글시트에서 [파일 → 공유 → 웹에 게시]로 CSV 형식 공개 링크를 만든 뒤 붙여넣어주세요.</div></div>
-    <div class="row" style="gap:8px;margin:10px 0;align-items:center">
-      <button class="btn sm" onclick="flLoadHeaders()">① 열 불러오기</button>
-      ${FL_DRAFT.cols.length?`<span class="card-sub">열 ${FL_DRAFT.cols.length}개 — 아래에서 각 열의 역할을 지정해주세요</span>`:''}
-    </div>
-    ${FL_DRAFT.cols.length?renderFlColsTable():''}
+  const src=FL_DRAFT.source||'paste';
+  const tabBtn=(v,l)=>`<button class="btn sm ${src===v?'primary':'ghost'}" onclick="flSetSource('${v}')">${l}</button>`;
+  let sourceBlock='';
+  if(src==='paste'){
+    sourceBlock=`<div class="fld-group"><label class="fld">엑셀/구글시트에서 응답 표를 복사해서 붙여넣기 (첫 줄은 열 제목)</label>
+      <textarea class="input" id="flPasteArea" rows="6" placeholder="타임스탬프    이름    사번    문항1    문항2 ...&#10;(엑셀에서 헤더 포함 범위를 선택해 복사한 뒤 여기에 붙여넣어주세요)" style="font-family:monospace;font-size:.78rem;white-space:pre">${esc(FL_DRAFT._pasteText||'')}</textarea></div>
+      <button class="btn sm" onclick="flLoadFromPaste()">① 표 읽어오기</button>`;
+  }else if(src==='file'){
+    sourceBlock=`<div class="fld-group"><label class="fld">CSV 파일 업로드</label>
+      <input type="file" id="flFileInput" accept=".csv,text/csv" onchange="flFileSelected(this)">
+      <div class="card-sub" style="margin-top:4px">엑셀/구글폼 응답을 "CSV(쉼표로 구분)" 형식으로 저장한 뒤 업로드해주세요. (.xlsx는 지원되지 않아요 — CSV로 다시 저장해주세요)</div></div>`;
+  }else{
+    sourceBlock=`<div class="fld-group"><label class="fld">공개 CSV 링크 (고급)</label>
+      <input class="input" id="flCsvUrl" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" value="${esc(FL_DRAFT.csvUrl||'')}" onchange="FL_DRAFT.csvUrl=this.value.trim()">
+      <div class="card-sub" style="margin-top:4px">구글시트를 [파일 → 공유 → 웹에 게시]로 CSV 공개 링크를 만든 경우에만 사용 — 회사 정책으로 막혀 있으면 위의 붙여넣기/업로드 방식을 이용해주세요.</div></div>
+      <button class="btn sm" onclick="flLoadHeaders()">① 열 불러오기</button>`;
+  }
+  const body=`<div class="row" style="gap:6px;margin-bottom:12px">${tabBtn('paste','📋 표 붙여넣기 (추천)')}${tabBtn('file','📁 CSV 파일 업로드')}${tabBtn('url','🔗 공개 CSV 링크')}</div>
+    ${sourceBlock}
+    ${FL_DRAFT.cols.length?`<div class="card-sub" style="margin:10px 0 0">열 ${FL_DRAFT.cols.length}개 — 아래에서 각 열의 역할을 지정해주세요</div>`+renderFlColsTable():''}
     ${FL_DRAFT.cols.length?`<div class="fld-group" style="margin-top:10px"><label class="fld">합격 기준(총점, 점 이상이면 합격)</label>
       <input class="input num" style="max-width:100px" value="${FL_DRAFT.passCutoff}" onchange="FL_DRAFT.passCutoff=+this.value||0"></div>`:''}
-    <div class="card-sub" style="margin-top:10px">정답을 비워두면 해당 문항은 채점 없이 응답만 기록됩니다 (문항별 정답/오답 분석에서 제외).</div>`;
+    ${FL_DRAFT.cols.length?`<div class="card-sub" style="margin-top:10px">정답을 비워두면 해당 문항은 채점 없이 응답만 기록됩니다 (문항별 정답/오답 분석에서 제외).</div>`:''}`;
   const foot=`<button class="btn" onclick="closeModal()">취소</button>
     ${cfgExists?`<button class="btn ghost" onclick="flDeleteConfig()">연동 삭제</button>`:''}
     ${FL_DRAFT.cols.length?`<button class="btn primary" onclick="flImportRun()">② 가져오기 실행</button>`:''}`;
-  openModal(`🔗 구글폼 연동 — ${esc(TL_TEST)}`,body,foot);
+  openModal(`📥 응답 가져오기 — ${esc(TL_TEST)}`,body,foot);
+}
+function flLoadFromPaste(){
+  const ta=document.getElementById('flPasteArea');
+  const text=ta?ta.value:'';
+  FL_DRAFT._pasteText=text;
+  if(!text||!text.trim()){toast('붙여넣을 표 내용이 없습니다');return;}
+  const rows=parsePastedTable(text);
+  if(!rows.length){toast('표 내용을 인식하지 못했습니다 — 첫 줄에 열 제목이 포함되어 있는지 확인해주세요');return;}
+  flApplyHeader(rows[0]);
+  FL_DRAFT._rows=rows;
+  toast(`열 ${rows[0].length}개를 읽어왔습니다 — 각 열의 역할을 지정해주세요`);
+  renderFormLinkModal();
+}
+function flFileSelected(input){
+  const file=input.files&&input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const text=String(reader.result||'');
+    const rows=parseCSV(text,',');
+    if(!rows.length){toast('CSV 내용을 인식하지 못했습니다');return;}
+    flApplyHeader(rows[0]);
+    FL_DRAFT._rows=rows;
+    FL_DRAFT._fileName=file.name;
+    toast(`"${file.name}"에서 열 ${rows[0].length}개를 읽어왔습니다 — 각 열의 역할을 지정해주세요`);
+    renderFormLinkModal();
+  };
+  reader.onerror=()=>toast('파일을 읽지 못했습니다');
+  reader.readAsText(file,'UTF-8');
 }
 async function flLoadHeaders(){
   const urlEl=document.getElementById('flCsvUrl');
@@ -3590,22 +3653,11 @@ async function flLoadHeaders(){
     const res=await fetch(FL_DRAFT.csvUrl);
     if(!res.ok)throw new Error('fetch failed');
     const text=await res.text();
-    const rows=parseCSV(text);
+    const rows=parseCSV(text,',');
     if(!rows.length)throw new Error('empty');
-    const header=rows[0];
-    const oldCols=FL_DRAFT.cols||[];
-    FL_DRAFT.cols=header.map(h=>{
-      const prev=oldCols.find(c=>c.header===h);
-      if(prev)return prev;
-      let kind='question';
-      if(/타임스탬프|timestamp/i.test(h))kind='date';
-      else if(/이름|성명/.test(h))kind='name';
-      else if(/사번/.test(h))kind='empNo';
-      else if(/팀|점포|매장|지점/.test(h))kind='store';
-      return{header:h,kind,subject:'',subItem:'',answer:'',points:1};
-    });
+    flApplyHeader(rows[0]);
     FL_DRAFT._rows=rows; // 바로 이어서 "가져오기 실행"할 때 재요청하지 않도록 캐시
-    toast(`열 ${header.length}개를 불러왔습니다 — 각 열의 역할을 지정해주세요`);
+    toast(`열 ${rows[0].length}개를 불러왔습니다 — 각 열의 역할을 지정해주세요`);
     renderFormLinkModal();
   }catch(e){
     console.error(e);
@@ -3615,14 +3667,15 @@ async function flLoadHeaders(){
 async function flImportRun(){
   if(!FL_DRAFT.cols.some(c=>c.kind==='question')){toast('채점(또는 응답 기록)할 문항 열을 1개 이상 지정해주세요');return;}
   if(!FL_DRAFT.cols.some(c=>c.kind==='name'||c.kind==='empNo')){toast('이름 또는 사번 열을 최소 1개 지정해주세요');return;}
-  toast('구글폼 응답을 불러와 채점하는 중...');
+  toast('응답을 불러와 채점하는 중...');
   try{
     let rows=FL_DRAFT._rows;
-    if(!rows){
+    if(!rows&&FL_DRAFT.source==='url'&&FL_DRAFT.csvUrl){
       const res=await fetch(FL_DRAFT.csvUrl);
       const text=await res.text();
-      rows=parseCSV(text);
+      rows=parseCSV(text,',');
     }
+    if(!rows){toast('먼저 "① 표 읽어오기/불러오기"로 응답을 불러와주세요');return;}
     const header=rows[0];
     const dataRows=rows.slice(1);
     const colIdx=FL_DRAFT.cols.map(c=>header.indexOf(c.header));
@@ -3659,13 +3712,13 @@ async function flImportRun(){
       const score=totalMax?Math.round(totalGot/totalMax*100):'';
       const rec={id:'tr'+Date.now()+Math.random().toString(36).slice(2,7),role:TL_ROLE,testName:TL_TEST,
         person,empNo,store,tenure:'',date:normDate,
-        score,passed:score!==''&&score>=(FL_DRAFT.passCutoff||60),memo:'',subjects,items,source:'google_form'};
+        score,passed:score!==''&&score>=(FL_DRAFT.passCutoff||60),memo:'',subjects,items,source:'form_import'};
       DB.testRecords.push(rec);
       sbUpsertTestRecord(rec);
       imported++;
     });
     DB.formLinks=(DB.formLinks||[]).filter(f=>f.id!==FL_DRAFT.id);
-    const cfgToSave=Object.assign({},FL_DRAFT);delete cfgToSave._rows;cfgToSave.updatedAt=new Date().toISOString();
+    const cfgToSave=Object.assign({},FL_DRAFT);delete cfgToSave._rows;delete cfgToSave._pasteText;delete cfgToSave._fileName;cfgToSave.updatedAt=new Date().toISOString();
     DB.formLinks.push(cfgToSave);
     sbUpsertFormLink(cfgToSave);
     save();closeModal();render();
@@ -3676,7 +3729,7 @@ async function flImportRun(){
   }
 }
 function flDeleteConfig(){
-  if(!confirm('구글폼 연동 설정을 삭제할까요? (이미 가져온 테스트 결과는 그대로 남습니다)'))return;
+  if(!confirm('응답 가져오기 설정을 삭제할까요? (이미 가져온 테스트 결과는 그대로 남습니다)'))return;
   const cfg=flConfigFor(TL_ROLE,TL_TEST);
   DB.formLinks=(DB.formLinks||[]).filter(f=>!(f.role===TL_ROLE&&f.testName===TL_TEST));
   save();closeModal();toast('연동 설정이 삭제되었습니다');
@@ -3909,7 +3962,7 @@ function vTestLog(){
     <div class="card-title" style="margin:0">${esc(TL_TEST)}</div>
     <button class="btn sm ghost" onclick="renameTestGroup('${TL_ROLE}',${nameArgTop})">✎ 이름 수정</button>
     <button class="btn sm ghost" onclick="exportTestCSV('${TL_ROLE}',${nameArgTop})">⬇ 엑셀(CSV) 내보내기</button>
-    <button class="btn sm ${flConfigFor(TL_ROLE,TL_TEST)?'primary':'ghost'}" onclick="openFormLinkModal()">🔗 구글폼 연동${flConfigFor(TL_ROLE,TL_TEST)?' 완료':''}</button>
+    <button class="btn sm ${flConfigFor(TL_ROLE,TL_TEST)?'primary':'ghost'}" onclick="openFormLinkModal()">📥 응답 가져오기${flConfigFor(TL_ROLE,TL_TEST)?' 완료':''}</button>
   </div>`;
 
   const summary=`<div class="grid g3" style="margin-bottom:14px">
