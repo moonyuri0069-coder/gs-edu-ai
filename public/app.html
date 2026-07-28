@@ -421,6 +421,7 @@ function load(){
   if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
   DB.deletedLinkTabIds=DB.deletedLinkTabIds||[]; // 삭제한 링크 탭 id (서버 삭제 실패 시 재등장 방지)
   DB.formLinks=DB.formLinks||[]; // 테스트별 구글폼(구글시트 CSV) 연동 설정
+  DB.testAnalyticsAI=DB.testAnalyticsAI||{}; // 테스트별 "AI 교육 우선순위 제안" 캐시 (이 기기에만 저장, 서버 동기화 안 됨)
   save();
 }
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(DB));}catch(e){}}
@@ -3596,13 +3597,18 @@ function renderFlColsTable(){
     <div class="card-sub" style="margin-top:6px">이미 점수가 계산되어 있는 표라면 "총점수/과목점수(직접입력)"를, 정답과 비교해 우리 앱이 채점해야 하면 "채점문항"을, 구글폼·MS폼즈가 이미 문항별로 점수를 매겨서 내보낸 표(예: "점수 - 문항명" 열)라면 "채점된 문항"을 사용하세요. 한 표 안에서 섞어 써도 됩니다. 사번 열이 없다면 이메일 열을 "사번/이메일" 역할로 지정해 개인 식별에 사용할 수 있어요.</div>`;
 }
 // header: 열 제목 배열, rows: (있으면) 전체 데이터 — 점수 열의 만점을 실제 데이터에서 추정하는 데 사용
+// 문항 텍스트 맨 앞에 "[과목명]"을 붙여두면(예: "[계약] 다음 중 옳은 것은?") 그 과목명을 자동으로 인식
+function flExtractBracketSubject(h){
+  const m=String(h||'').match(/^\s*\[([^\]]+)\]/);
+  return m?m[1].trim():'';
+}
 function flApplyHeader(header,rows){
   const oldCols=FL_DRAFT.cols||[];
   const dataRows=rows?rows.slice(1):null;
   FL_DRAFT.cols=header.map((h,hi)=>{
     const prev=oldCols.find(c=>c.header===h);
     if(prev)return prev;
-    let kind='question',linkedHeader='',points=1;
+    let kind='question',linkedHeader='',points=1,subject='';
     const hh=String(h||'');
     if(/^ID$/i.test(hh)||/^(시작 시간|완료 시간|퀴즈 피드백)$/.test(hh))kind='ignore';
     else if(/^피드백\s*-\s*/.test(hh))kind='ignore'; // 구글폼/MS폼즈가 붙이는 문항별 서술형 피드백 열은 기본 제외
@@ -3611,6 +3617,7 @@ function flApplyHeader(header,rows){
       kind='scoredQuestion';
       const qName=hh.replace(/^점수\s*-\s*/,'');
       if(header.includes(qName))linkedHeader=qName;
+      subject=flExtractBracketSubject(qName); // "점수 - [계약] 문항" 형태에서도 과목명 인식
       if(dataRows){
         const vals=dataRows.map(r=>+r[hi]||0).filter(v=>!isNaN(v));
         if(vals.length)points=Math.max(1,Math.max(...vals));
@@ -3629,7 +3636,8 @@ function flApplyHeader(header,rows){
       // 이 열이 "점수 - X" 형태의 짝을 가진 원본 문항 텍스트 열이면, 점수 열이 채점을 담당하므로 이 열은 기본 제외
       kind='ignore';
     }
-    return{header:h,kind,subject:'',subItem:'',answer:'',points,linkedHeader};
+    if(kind==='question')subject=flExtractBracketSubject(hh); // "[계약] 문항..." 형태의 일반 채점문항 열
+    return{header:h,kind,subject,subItem:'',answer:'',points,linkedHeader};
   });
 }
 // 구글 Apps Script 웹훅 코드 — 구글폼에 연결하면 응답 제출 즉시 Supabase로 전송됨
@@ -4036,15 +4044,33 @@ ${wrongLines||'(오답 없음)'}
   "priorityOrder":"학습 우선순위(과목·항목 순서로 나열)",
   "comment":"종합 코멘트 1~2문장"
 }`;
+  let debugMsg='';
   try{
     const res=await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})}
     );
     const data=await res.json();
+    if(!res.ok){
+      // Gemini가 에러를 반환한 경우(API 키 문제, 쿼터 초과, 모델명 오류 등) — 콘솔과 화면에 실제 원인을 남겨 진단할 수 있게 함
+      console.error('Gemini API 오류 응답:',res.status,data);
+      debugMsg=`HTTP ${res.status} — ${data?.error?.message||'알 수 없는 오류'}`;
+      throw new Error(debugMsg);
+    }
     const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    if(!text){
+      console.error('Gemini 응답에 텍스트가 없음:',data);
+      debugMsg=data.promptFeedback?.blockReason?`안전 필터에 의해 응답이 차단됨(${data.promptFeedback.blockReason})`:'응답이 비어있음(candidates 없음)';
+      throw new Error(debugMsg);
+    }
     const clean=text.replace(/```json|```/g,'').trim();
-    const report=JSON.parse(clean);
+    let report;
+    try{report=JSON.parse(clean);}
+    catch(parseErr){
+      console.error('Gemini 응답 JSON 파싱 실패. 원문:',text);
+      debugMsg='응답을 JSON으로 해석하지 못함(모델이 형식을 안 지킴)';
+      throw parseErr;
+    }
     rec.aiReport=report;
     rec.aiReportAt=new Date().toISOString();
     save();
@@ -4057,6 +4083,7 @@ ${wrongLines||'(오답 없음)'}
     const box2=document.getElementById('aiReportBox');
     if(box2)box2.innerHTML=`<div class="card" style="padding:14px;border:1px solid #be185d">
       <div style="color:#be185d;margin-bottom:8px">⚠ AI 리포트 생성에 실패했습니다. 잠시 후 다시 시도해주세요.</div>
+      ${debugMsg?`<div class="card-sub" style="margin-bottom:8px;font-family:monospace;font-size:.72rem">${esc(debugMsg)}</div>`:''}
       <button class="btn sm primary" onclick="runAiIndividualReport('${id}')">↻ 다시 시도</button></div>`;
   }
 }
@@ -4079,6 +4106,129 @@ async function downloadAiReportPdf(id){
     pdf.save(`${rec.person||'응시자'}_${rec.testName||'테스트'}_AI리포트.pdf`);
     toast('✅ PDF 다운로드 완료');
   }catch(e){console.error(e);toast('PDF 생성 실패');}
+}
+
+/* ═══════════ 관리자용 전체 응시자 분석 (테스트 단위) ═══════════ */
+function computeTestAnalytics(role,testName){
+  const rows=(DB.testRecords||[]).filter(r=>r.role===role&&(r.testName||'(이름 없음)')===testName);
+  const n=rows.length;
+  const scores=rows.map(r=>+r.score).filter((v,i)=>!isNaN(v)&&rows[i].score!==''&&rows[i].score!=null);
+  const avgScore=scores.length?avg(scores):null;
+  const passN=rows.filter(r=>r.passed).length;
+  const maxScore=scores.length?Math.max(...scores):null;
+  const minScore=scores.length?Math.min(...scores):null;
+
+  // 과목별 평균 점수
+  const subjMap={};
+  rows.forEach(r=>(r.subjects||[]).forEach(s=>{
+    if(s.score===''||s.score==null)return;
+    (subjMap[s.name]=subjMap[s.name]||[]).push(+s.score);
+  }));
+  const subjStats=Object.keys(subjMap).map(name=>({name,avg:avg(subjMap[name]),n:subjMap[name].length})).sort((a,b)=>a.avg-b.avg);
+
+  // 세부 항목별(과목/세부항목) 정답률 + 문항별 정답률 — 문항 상세(items)가 있는 응시자만 대상
+  const subItemMap={},qMap={};
+  rows.forEach(r=>(r.items||[]).forEach(it=>{
+    if(it.isCorrect==null)return;
+    const key=it.subject+(it.subItem?(' / '+it.subItem):'');
+    if(!subItemMap[key])subItemMap[key]={got:0,n:0};
+    subItemMap[key].n++;if(it.isCorrect)subItemMap[key].got++;
+    if(!qMap[it.q])qMap[it.q]={subject:it.subject,got:0,n:0};
+    qMap[it.q].n++;if(it.isCorrect)qMap[it.q].got++;
+  }));
+  const subItemStats=Object.keys(subItemMap).map(key=>({key,pct:Math.round(subItemMap[key].got/subItemMap[key].n*100),n:subItemMap[key].n})).sort((a,b)=>a.pct-b.pct);
+  const qStats=Object.keys(qMap).map(q=>({q,subject:qMap[q].subject,pct:Math.round(qMap[q].got/qMap[q].n*100),n:qMap[q].n})).sort((a,b)=>a.pct-b.pct);
+
+  return{n,avgScore,passN,passRate:n?passN/n*100:0,maxScore,minScore,subjStats,subItemStats,qStats};
+}
+function openTestAnalytics(){
+  if(!TL_TEST)return;
+  const a=computeTestAnalytics(TL_ROLE,TL_TEST);
+  const weakSubj=a.subjStats.slice(0,5),weakSubItem=a.subItemStats.slice(0,10),weakQ=a.qStats.slice(0,10);
+  const bar=(pct,color)=>`<div style="background:var(--bg2,rgba(127,127,127,.15));border-radius:4px;height:7px;overflow:hidden;margin-top:3px"><div style="width:${Math.max(0,Math.min(100,pct))}%;background:${color};height:100%"></div></div>`;
+  const nameArg=JSON.stringify(TL_TEST).replace(/"/g,'&quot;');
+  const body=`
+    <div class="grid g3" style="margin-bottom:14px">
+      ${kpi('응시 인원',a.n,'명','','flat')}
+      ${kpi('평균 점수',a.avgScore!=null?f1(a.avgScore):'-',a.avgScore!=null?'점':'','','up')}
+      ${kpi('합격률',a.n?Math.round(a.passRate):'-',a.n?'%':'',a.n?`${a.passN}/${a.n}명 합격`:'','up')}
+    </div>
+    <div class="row" style="gap:20px;margin-bottom:16px;font-size:.85rem">
+      <span>최고점 <b class="num">${a.maxScore??'-'}</b></span>
+      <span>최저점 <b class="num">${a.minScore??'-'}</b></span>
+    </div>
+    <div class="card-title" style="margin:14px 0 6px">🔻 취약 과목 TOP5</div>
+    ${weakSubj.length?weakSubj.map(s=>{const w=weakLabel(s.avg);return `<div style="margin-bottom:10px">
+      <div class="spread" style="font-size:.82rem"><span>${esc(s.name)} <span style="color:var(--ink4)">(${s.n}명)</span></span>
+      <b class="num" style="color:${w?w.color:'inherit'}">${w?w.emoji+' ':''}${f1(s.avg)}점</b></div>
+      ${bar(s.avg,w?w.color:'#888')}
+    </div>`;}).join(''):'<div class="card-sub">과목별 점수 데이터가 없습니다</div>'}
+    <div class="card-title" style="margin:16px 0 6px">🔻 취약 세부항목 TOP10</div>
+    ${weakSubItem.length?weakSubItem.map(s=>{const w=weakLabel(s.pct);return `<div style="margin-bottom:8px">
+      <div class="spread" style="font-size:.8rem"><span>${esc(s.key)} <span style="color:var(--ink4)">(${s.n}건)</span></span>
+      <b class="num" style="color:${w?w.color:'inherit'}">${s.pct}%</b></div>
+      ${bar(s.pct,w?w.color:'#888')}
+    </div>`;}).join(''):'<div class="card-sub">문항별 상세 데이터(붙여넣기/업로드로 채점문항을 넣은 응시자)가 없습니다</div>'}
+    <div class="card-title" style="margin:16px 0 6px">🔻 정답률 최저 문항 TOP10</div>
+    ${weakQ.length?`<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>문항</th><th>과목</th><th style="text-align:center">정답률</th></tr></thead><tbody>
+      ${weakQ.map(q=>{const w=weakLabel(q.pct);return `<tr><td style="font-size:.78rem;max-width:280px">${esc(q.q)}</td><td style="font-size:.78rem">${esc(q.subject)}</td><td style="text-align:center;font-weight:800;color:${w?w.color:'inherit'}">${q.pct}%</td></tr>`;}).join('')}
+    </tbody></table></div>`:'<div class="card-sub">문항별 상세 데이터가 없습니다</div>'}
+    <div id="taiBox" style="margin-top:18px">${renderTestAiSummarySection(TL_ROLE,TL_TEST)}</div>
+  `;
+  openModal(`📊 전체 분석 — ${esc(TL_TEST)}`,body,`<button class="btn" onclick="closeModal()">닫기</button>`);
+}
+function taiKey(role,testName){return role+'||'+testName;}
+function renderTestAiSummarySection(role,testName){
+  const cached=(DB.testAnalyticsAI||{})[taiKey(role,testName)];
+  const nameArg=JSON.stringify(testName).replace(/"/g,'&quot;');
+  if(cached){
+    return `<div class="card" style="padding:14px;background:var(--bg2,rgba(127,127,127,.06))">
+      <div class="spread" style="margin-bottom:8px;gap:8px;flex-wrap:wrap"><div class="card-title" style="margin:0">✨ AI 교육 우선순위 제안</div>
+        <button class="btn sm ghost" onclick="runTestAiSummary('${role}',${nameArg})">↻ 다시 생성</button></div>
+      <div style="font-size:.85rem;line-height:1.8;white-space:pre-wrap">${esc(cached.text)}</div>
+      <div class="card-sub" style="margin-top:8px">생성 시각: ${esc(new Date(cached.at).toLocaleString('ko-KR'))} · 이 기기에만 저장됨(서버 동기화 안 됨)</div>
+    </div>`;
+  }
+  return `<button class="btn primary sm" onclick="runTestAiSummary('${role}',${nameArg})">✨ AI 교육 우선순위 제안 생성</button>`;
+}
+async function runTestAiSummary(role,testName){
+  const box=document.getElementById('taiBox');
+  if(box)box.innerHTML='<div class="card-sub">✨ 생성 중... 잠시만 기다려주세요</div>';
+  const a=computeTestAnalytics(role,testName);
+  const weakSubj=a.subjStats.slice(0,5).map(s=>`- ${s.name}: 평균 ${f1(s.avg)}점 (${s.n}명)`).join('\n');
+  const weakSubItem=a.subItemStats.slice(0,10).map(s=>`- ${s.key}: 정답률 ${s.pct}% (${s.n}건)`).join('\n');
+  const prompt=`다음은 GS더프레시 "${testName}"(${role} 대상) 테스트의 전체 응시자 분석 데이터입니다.
+응시 인원: ${a.n}명, 평균 ${a.avgScore!=null?f1(a.avgScore):'-'}점, 합격률 ${a.n?Math.round(a.passRate):'-'}%
+
+[취약 과목]
+${weakSubj||'(데이터 없음)'}
+
+[취약 세부항목]
+${weakSubItem||'(데이터 없음)'}
+
+위 데이터를 바탕으로 교육 담당자가 다음 교육과정을 기획할 때 바로 활용할 수 있도록 "교육 우선순위"를 1순위/2순위/3순위 형태로 제시하고, 각 순위별로 왜 우선인지 근거를 한 문장씩 덧붙여주세요. 점수나 정답률 숫자는 절대 새로 만들어내지 말고 위에 주어진 데이터만 근거로 사용하세요. 5~8문장 분량의 일반 텍스트로만 답하고 JSON이나 마크다운 기호(#, * 등)는 쓰지 마세요.`;
+  let debugMsg='';
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await res.json();
+    if(!res.ok){console.error('Gemini API 오류 응답:',res.status,data);debugMsg=`HTTP ${res.status} — ${data?.error?.message||'알 수 없는 오류'}`;throw new Error(debugMsg);}
+    const text=(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
+    if(!text){console.error('Gemini 응답에 텍스트가 없음:',data);debugMsg='응답이 비어있음';throw new Error(debugMsg);}
+    DB.testAnalyticsAI=DB.testAnalyticsAI||{};
+    DB.testAnalyticsAI[taiKey(role,testName)]={text,at:new Date().toISOString()};
+    save();
+    const box2=document.getElementById('taiBox');
+    if(box2)box2.innerHTML=renderTestAiSummarySection(role,testName);
+  }catch(e){
+    console.error('전체분석 AI 오류:',e);
+    const nameArg=JSON.stringify(testName).replace(/"/g,'&quot;');
+    const box2=document.getElementById('taiBox');
+    if(box2)box2.innerHTML=`<div class="card" style="padding:14px;border:1px solid #be185d">
+      <div style="color:#be185d;margin-bottom:8px">⚠ 생성에 실패했습니다. 잠시 후 다시 시도해주세요.</div>
+      ${debugMsg?`<div class="card-sub" style="margin-bottom:8px;font-family:monospace;font-size:.72rem">${esc(debugMsg)}</div>`:''}
+      <button class="btn sm primary" onclick="runTestAiSummary('${role}',${nameArg})">↻ 다시 시도</button></div>`;
+  }
 }
 
 function vTestLog(){
@@ -4169,6 +4319,7 @@ function vTestLog(){
     <button class="btn sm ghost" onclick="renameTestGroup('${TL_ROLE}',${nameArgTop})">✎ 이름 수정</button>
     <button class="btn sm ghost" onclick="exportTestCSV('${TL_ROLE}',${nameArgTop})">⬇ 엑셀(CSV) 내보내기</button>
     <button class="btn sm ${flConfigFor(TL_ROLE,TL_TEST)?'primary':'ghost'}" onclick="openFormLinkModal()">📥 응답 가져오기${flConfigFor(TL_ROLE,TL_TEST)?' 완료':''}</button>
+    <button class="btn sm ghost" onclick="openTestAnalytics()">📊 전체 분석</button>
     <button class="btn sm ghost" style="color:#be185d" onclick="deleteTestGroup('${TL_ROLE}',${nameArgTop})">🗑 이 테스트 전체 삭제</button>
   </div>`;
 
