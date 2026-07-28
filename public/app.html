@@ -3602,9 +3602,25 @@ function flExtractBracketSubject(h){
   const m=String(h||'').match(/^\s*\[([^\]]+)\]/);
   return m?m[1].trim():'';
 }
+// MS폼즈/구글폼은 "점수 - 문항명"/"피드백 - 문항명" 열을 만들 때 원본 문항 열 맨 앞의 "[과목명]" 태그와
+// 줄바꿈/공백 차이를 그대로 남기지 않는 경우가 많아, 단순 문자열 비교로는 짝을 못 찾는 문제가 있었음.
+// 대괄호 태그와 공백/줄바꿈 차이를 무시하고 비교할 수 있도록 정규화.
+function flNormForMatch(s){
+  return String(s||'')
+    .replace(/^\s*\[[^\]]+\]\s*/,'')
+    .replace(/[\s ]+/g,' ')
+    .trim();
+}
 function flApplyHeader(header,rows){
   const oldCols=FL_DRAFT.cols||[];
   const dataRows=rows?rows.slice(1):null;
+  // "[과목명]"이 붙어있는 원본 문항 열들을 미리 모아둠 — "점수 -"/"피드백 -" 열이 과목 태그 없이
+  // 원본 문항 텍스트만 갖고 있어도(공백/줄바꿈 차이 포함) 여기서 찾아 과목을 물려받을 수 있게 함
+  const bracketed=header.map(h=>({raw:h,norm:flNormForMatch(h),subject:flExtractBracketSubject(h)})).filter(x=>x.subject);
+  const findBySuffix=suffix=>{
+    const n=flNormForMatch(suffix);
+    return bracketed.find(b=>b.norm===n);
+  };
   FL_DRAFT.cols=header.map((h,hi)=>{
     const prev=oldCols.find(c=>c.header===h);
     if(prev)return prev;
@@ -3616,8 +3632,12 @@ function flApplyHeader(header,rows){
       // "점수 - 문항명" 형태: MS폼즈/구글폼 애드온이 이미 채점해서 내보낸 열
       kind='scoredQuestion';
       const qName=hh.replace(/^점수\s*-\s*/,'');
-      if(header.includes(qName))linkedHeader=qName;
-      subject=flExtractBracketSubject(qName); // "점수 - [계약] 문항" 형태에서도 과목명 인식
+      const match=findBySuffix(qName); // 짝이 되는 "[과목] 문항..." 원본 열을 찾아 과목을 물려받음
+      if(match){linkedHeader=match.raw;subject=match.subject;}
+      else{
+        if(header.includes(qName))linkedHeader=qName;
+        subject=flExtractBracketSubject(qName); // "점수 - [계약] 문항"처럼 이 열 자체에 태그가 남아있는 경우
+      }
       if(dataRows){
         const vals=dataRows.map(r=>+r[hi]||0).filter(v=>!isNaN(v));
         if(vals.length)points=Math.max(1,Math.max(...vals));
@@ -3632,8 +3652,8 @@ function flApplyHeader(header,rows){
     else if(hh.length<=15&&/근속/.test(hh))kind='tenure';
     else if(hh.length<=15&&/팀|점포|매장|지점/.test(hh))kind='store';
     else if(/^총\s*점수$|^총점$/.test(hh))kind='totalScore';
-    else if(header.includes('점수 - '+hh)||header.includes('점수-'+hh)){
-      // 이 열이 "점수 - X" 형태의 짝을 가진 원본 문항 텍스트 열이면, 점수 열이 채점을 담당하므로 이 열은 기본 제외
+    else if(header.some(h2=>h2!==hh&&/^점수\s*-\s*/.test(h2)&&flNormForMatch(h2.replace(/^점수\s*-\s*/,''))===flNormForMatch(hh))){
+      // 이 열의 짝이 되는 "점수 - X" 열이 있으면(과목 태그 유무와 무관하게) 그 열이 채점을 담당하므로 이 열은 기본 제외
       kind='ignore';
     }
     if(kind==='question')subject=flExtractBracketSubject(hh); // "[계약] 문항..." 형태의 일반 채점문항 열
