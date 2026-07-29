@@ -302,10 +302,14 @@ table.ep-table{border-collapse:separate;border-spacing:0;width:100%;min-width:16
 .ep-td-group{position:sticky;left:0;z-index:3;width:132px;min-width:132px;border-right:1px solid var(--border)}
 .ep-td-row{position:sticky;left:132px;z-index:2;width:140px;min-width:140px;border-right:2px solid var(--border)}
 .ep-table td{padding:6px;border-bottom:1px solid var(--border);vertical-align:top}
-.ep-holiday-row td{background:#fdf6e3;border-bottom:2px solid #edd9a3}
-[data-theme="dark"] .ep-holiday-row td{background:#332c14;border-bottom:2px solid #5c4d1e}
-.ep-holiday-input{background:transparent!important;border:none!important;font-weight:700;color:#92720d!important}
-[data-theme="dark"] .ep-holiday-input{color:#e0c060!important}
+/* 그 달에 교육이 없는 칸은 대분류 색과 무관하게 항상 흰 바탕 — 채워진 칸만 카드 스타일(.ep-cell-card.has)로 색이 들어옴 */
+.ep-table td:not(.ep-td-group):not(.ep-td-row){background:var(--surface)}
+/* 공휴일 = 달력 상단의 작은 이벤트 배지로 표시(입력 없으면 안 보이다가, 입력하면 알약 모양 배지로 나타남) */
+.ep-event-badge{display:block;width:100%;margin-top:4px;text-align:center;font-size:.62rem!important;font-weight:700!important;
+  padding:2px 6px!important;border-radius:99px!important;border:1px solid transparent!important;background:transparent!important;
+  color:var(--ink4)!important}
+.ep-event-badge:not(:placeholder-shown){background:#fdf6e3!important;color:#92720d!important;border-color:#edd9a3!important}
+[data-theme="dark"] .ep-event-badge:not(:placeholder-shown){background:#332c14!important;color:#e0c060!important;border-color:#5c4d1e!important}
 .ep-group-name{font-weight:800;font-size:.86rem;border:none!important;background:transparent!important;padding:2px 4px!important}
 .ep-group-count{font-size:.68rem;font-weight:700;border:none!important;background:transparent!important;padding:2px 4px!important;
   display:inline-block;border-radius:99px;padding:2px 8px!important;margin-top:4px}
@@ -319,6 +323,8 @@ table.ep-table{border-collapse:separate;border-spacing:0;width:100%;min-width:16
 .ep-sub-row{display:flex;gap:4px;margin-top:3px}
 .ep-sub{flex:1;min-width:0;border:none!important;background:rgba(127,127,127,.08)!important;border-radius:6px!important;
   font-size:.66rem!important;padding:3px 5px!important;color:var(--ink2)}
+/* 안내 문구(placeholder)는 아주 연하게, 실제로 입력한 내용은 원래대로 진하게 */
+.ep-name::placeholder,.ep-sub::placeholder{color:var(--ink4)!important;font-weight:400!important;opacity:.6}
 .ep-g0{background:#eef4ff}.ep-g0b{border-left:4px solid #93c5fd}
 .ep-g1{background:#eefcf3}.ep-g1b{border-left:4px solid #86efac}
 .ep-g2{background:#fdf4ff}.ep-g2b{border-left:4px solid #d8b4fe}
@@ -5364,10 +5370,10 @@ function vEduPlan(){
     rows.forEach((r,ri)=>flat.push({g,r,gi,isFirst:ri===0,span:rows.length}));
   });
 
-  const monthHeadCells=EP_MONTHS.map(m=>`<th>${m}월</th>`).join('');
-  const holidayCells=EP_MONTHS.map(m=>`<td style="text-align:center">
-    <input class="input ep-holiday-input" style="padding:3px 4px;font-size:.72rem;text-align:center" placeholder="-" value="${esc((plan.holidays||{})[m]||'')}" onchange="updateEduHoliday('${plan.id}','${m}',this.value)">
-  </td>`).join('');
+  // 공휴일은 별도 행이 아니라 달 제목 아래 작은 이벤트 배지로 표시 — 입력하면 알약 모양으로 나타남
+  const monthHeadCells=EP_MONTHS.map(m=>`<th>${m}월
+    <input class="input ep-event-badge" placeholder="+이벤트" value="${esc((plan.holidays||{})[m]||'')}" onchange="updateEduHoliday('${plan.id}','${m}',this.value)">
+  </th>`).join('');
 
   const bodyRows=flat.map(({g,r,gi,isFirst,span})=>{
     const gcls=EP_GCLASS[gi%EP_GCLASS.length];
@@ -5419,7 +5425,6 @@ function vEduPlan(){
     <div class="ep-wrap"><table class="ep-table">
       <thead><tr><th class="ep-th-corner1">구분</th><th class="ep-th-corner2">세부 항목</th>${monthHeadCells}<th style="min-width:44px"></th></tr></thead>
       <tbody>
-        <tr class="ep-holiday-row"><td class="ep-td-group"></td><td class="ep-td-row" style="font-size:.75rem;font-weight:700;color:#92720d;text-align:right;padding-right:8px">🎌 공휴일</td>${holidayCells}<td></td></tr>
         ${bodyRows||`<tr><td colspan="${2+EP_MONTHS.length+1}" style="text-align:center;color:var(--ink4);padding:20px">＋ 대분류(구분) 추가로 시작해주세요</td></tr>`}
       </tbody>
     </table></div>
