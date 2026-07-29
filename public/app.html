@@ -422,6 +422,12 @@ function load(){
   DB.deletedLinkTabIds=DB.deletedLinkTabIds||[]; // 삭제한 링크 탭 id (서버 삭제 실패 시 재등장 방지)
   DB.formLinks=DB.formLinks||[]; // 테스트별 구글폼(구글시트 CSV) 연동 설정
   DB.testAnalyticsAI=DB.testAnalyticsAI||{}; // 테스트별 "AI 교육 우선순위 제안" 캐시 (이 기기에만 저장, 서버 동기화 안 됨)
+  DB.eduPlans=DB.eduPlans||[]; // 연간일정관리 — 연도별 교육 운영 캘린더
+  DB.deletedEduPlanIds=DB.deletedEduPlanIds||[]; // 삭제한 연간일정 id (서버 삭제 실패 시 재등장 방지)
+  if(!DB._eduSeeded){ // 이 기능을 처음 쓰는 브라우저에만 27년 교육 운영안 견본 데이터를 한 번 채워줌(고정 id라 여러 브라우저에서 동시에 만들어도 서버에서 중복되지 않음)
+    DB._eduSeeded=true;
+    if(!DB.eduPlans.length)DB.eduPlans.push(eduPlanSeed2027());
+  }
   save();
 }
 function save(){try{localStorage.setItem(LS_KEY,JSON.stringify(DB));}catch(e){}}
@@ -706,6 +712,7 @@ const MENUS=[['dash','Dashboard','M3 13h6V3H3v10zm0 8h6v-6H3v6zm8 0h10V11H11v10z
  ['guide','교육생안내','M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM5 10h9v2H5zm0-3h9v2H5zm0 6h6v2H5zm11 1l-1.4-1.4L16 11.2l-1.4-1.4L13 11.4 11.6 10 10 11.6l3 3 5-5z'],
  ['feedback','강사피드백','M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12l-3-3-3 3V4h6v10z'],
  ['testlog','테스트 이력관리','M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-7.5 9.5l2 2 4.5-4.5'],
+ ['eduplan','연간일정관리','M7 2v2M17 2v2M3.5 8h17M4 4h16a1 1 0 011 1v15a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1zm2 8h3v3H6v-3zm0 0'],
  ['links','링크관리','M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z'],
  ['settings','설정','M19.4 13a7.7 7.7 0 000-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 00-1.7-1l-.4-2.6h-4l-.4 2.6a7.7 7.7 0 00-1.7 1l-2.4-1-2 3.4L6.6 11a7.7 7.7 0 000 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 001.7 1l.4 2.6h4l.4-2.6a7.7 7.7 0 001.7-1l2.4 1 2-3.4-2.2-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z']];
 const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간'],trainings:['교육관리','교육·강의 구성 · QR/설문 URL · 응답 마감'],
@@ -716,6 +723,7 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  guide:['교육생안내','출석QR · 일정안내 · 만족도QR — 16:9 교육용 화면'],
  feedback:['강사피드백','교육 차수별 강사 피드백 작성'],
  testlog:['테스트 이력관리','직책별 테스트 합격 여부 · 점수 관리'],
+ eduplan:['연간일정관리','연도별 교육 운영 캘린더 — 월별 교육 일정 관리'],
  links:['링크관리','자주 쓰는 공유 링크를 탭별로 정리'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
@@ -812,7 +820,7 @@ function render(){
   const parts=h.replace('#/','').split('/');
   const page=parts[0]||'dash';
   const body={dash:vDash,trainings:vTrainings,instructors:parts[1]?()=>vInstructorDetail(parts[1]):vInstructors,
-    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,testlog:vTestLog,links:vLinks,settings:vSettings}[page]||vDash;
+    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,testlog:vTestLog,eduplan:vEduPlan,links:vLinks,settings:vSettings}[page]||vDash;
   const [title,sub]=PAGE_META[page]||PAGE_META.dash;
   $('#app').innerHTML=`
   <div class="layout">
@@ -996,6 +1004,8 @@ async function syncFromSupabase(){
     await syncLinkTabs();
     // 구글폼 연동 설정 동기화 (form_links 테이블이 없으면 조용히 건너뜀)
     await syncFormLinks();
+    // 연간일정관리 동기화 (edu_plans 테이블이 없으면 조용히 건너뜀)
+    await syncEduPlans();
     // 웹훅으로 실시간 수신된 응답을 채점해 테스트 이력관리에 반영 (form_hooks_raw 테이블이 없으면 조용히 건너뜀)
     await flSyncAllWebhooks();
     save();
@@ -5086,6 +5096,252 @@ function vLinks(){
     </div>`).join(''):'<div class="empty">등록된 링크가 없습니다. "＋ 링크 추가"로 등록해주세요.</div>';
 
   return tabBar+`<div class="row" style="margin-bottom:12px"><button class="btn primary sm" onclick="addLink('${cur.id}')">＋ 링크 추가</button></div>`+list;
+}
+
+/* ═══════════ 연간일정관리 — 연도별 교육 운영 캘린더 ═══════════ */
+// 이 기능을 처음 켠 브라우저에 27년 교육 운영안 사진 자료를 그대로 옮겨 넣어주는 견본 데이터.
+// id를 고정값('ep2027')으로 둬서, 여러 사람이 각자 브라우저에서 처음 켤 때 서로 다른 견본이
+// 중복 생성되지 않고 서버(Supabase)에서 하나로 합쳐지도록 함.
+function eduPlanSeed2027(){
+  return {id:'ep2027',year:2027,title:'27년 교육 운영 안(51회)',
+    holidays:{'2':'설(2.6~9)','9':'추석(9/14~16)'},
+    groups:[
+      {id:'g_jy',name:'직영',countLabel:'31회',rows:[
+        {id:'r_jjang',label:'점장',countLabel:'7회',cells:{'4':'점장보수교육','5':'점장보수교육','10':'점장향상과정\n(2회)','11':'점장향상과정\n(2회)','12':'점장향상과정\n(1회)'}},
+        {id:'r_bujjang',label:'부점장',countLabel:'4회',cells:{'4':'부점장향상과정\n(2회)','5':'부점장향상과정\n(2회)'}},
+        {id:'r_jumpo',label:'점포영업담당',countLabel:'12회',cells:{'2':'담당역량향상\n(1회)','3':'담당역량향상\n(2회)\n100일교육\n(26년 下입사)','4':'담당역량향상\n(2회)','5':'담당 초급\n(26년 5월입사)','6':'담당 중급\n(25년 6월입사)','9':'100일교육\n(27년上)','10':'경력사원리텐션','11':'담당중급\n(25년 11월입사)','12':'담당초급\n(26년 下입사)'}},
+        {id:'r_intern',label:'인턴사원',countLabel:'4회',cells:{'5':'인턴입문','6':'인턴리텐션','11':'인턴입문/인턴리텐션'}},
+        {id:'r_smgr',label:'S매니저',countLabel:'5회',cells:{'10':'S매니저향상\n(2회)','11':'S매니저향상\n(2회)','12':'S매니저향상\n(1회)'}},
+        {id:'r_test_jy',label:'테스트(직)',countLabel:'',cells:{'4':'부점장테스트','5':'부점장테스트','10':'점장테스트','11':'점장테스트','12':'점장테스트'}},
+      ]},
+      {id:'g_gm',name:'가맹',countLabel:'14회',rows:[
+        {id:'r_ofc',label:'OFC',countLabel:'9회',cells:{'3':'OFC초급','5':'OFC중급','10':'OFC심화'}},
+        {id:'r_jayul',label:'자율선택',countLabel:'',cells:{'2':'자율선택','4':'자율선택','6':'자율선택','8':'자율선택','10':'자율선택','12':'자율선택'}},
+        {id:'r_gaejeom',label:'개점담당',countLabel:'5회',cells:{'3':'예비OFC','4':'개점보수','8':'개점보수','11':'예비OFC','12':'개점보수'}},
+        {id:'r_test_gm',label:'테스트(가)',countLabel:'',cells:{'4':'G-OST','5':'OFC역량테스트','8':'G-OST','11':'OFC역량테스트','12':'G-OST'}},
+      ]},
+      {id:'g_dev',name:'개발담당',countLabel:'3회',rows:[
+        {id:'r_dev',label:'개발담당',countLabel:'3회',cells:{'2':'개발협상','7':'개발담당기본','10':'개발협상'}},
+      ]},
+      {id:'g_etc',name:'기타',countLabel:'',rows:[
+        {id:'r_lecturer',label:'사내강사',countLabel:'2회',cells:{'4':'사내강사\n역량향상','12':'사내강사\n역량향상'}},
+      ]},
+    ]};
+}
+let EP_ID=null; // 현재 선택된 연간일정 탭(연도)의 plan id
+function epPlans(){return (DB.eduPlans||[]).slice().sort((a,b)=>(b.year||0)-(a.year||0));}
+function epCurrent(){
+  const plans=epPlans();
+  if(!plans.length)return null;
+  if(!EP_ID||!plans.find(p=>p.id===EP_ID))EP_ID=plans[0].id;
+  return plans.find(p=>p.id===EP_ID);
+}
+function addEduYear(){
+  const plans=epPlans();
+  const suggested=plans.length?plans[0].year+1:new Date().getFullYear();
+  const y=parseInt(prompt('새로 추가할 연도를 입력해주세요 (예: 2028)',suggested)||'',10);
+  if(!y)return;
+  const dup=plans.find(p=>p.year===y);
+  if(dup){toast(`${y}년 일정은 이미 있습니다`);EP_ID=dup.id;render();return;}
+  const id='ep'+Date.now()+Math.random().toString(36).slice(2,6);
+  // 있으면 가장 최근 연도의 대분류/세부항목 구성을 그대로 복사해서 시작(매년 카테고리가 비슷하므로) — 월별 내용은 비움
+  const base=plans[0];
+  const groups=base?JSON.parse(JSON.stringify(base.groups||[])).map(g=>({...g,id:'g'+Date.now()+Math.random().toString(36).slice(2,5),
+    rows:(g.rows||[]).map(r=>({...r,id:'r'+Date.now()+Math.random().toString(36).slice(2,5),cells:{}}))})):[];
+  const plan={id,year:y,title:`${String(y).slice(2)}년 교육 운영 안`,holidays:{},groups};
+  DB.eduPlans.push(plan);
+  EP_ID=id;
+  save();render();
+  sbUpsertEduPlan(plan);
+  toast(`${y}년 일정이 추가되었습니다`);
+}
+function updateEduTitle(id,value){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  plan.title=value;save();sbUpsertEduPlan(plan);
+}
+function updateEduYear(id,value){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const y=parseInt(value,10);if(!y)return;
+  plan.year=y;save();render();sbUpsertEduPlan(plan);
+}
+function deleteEduYear(id){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  if(!confirm(`${plan.year}년 일정 전체를 삭제하시겠습니까? 되돌릴 수 없습니다.`))return;
+  DB.eduPlans=DB.eduPlans.filter(p=>p.id!==id);
+  DB.deletedEduPlanIds=DB.deletedEduPlanIds||[];
+  if(!DB.deletedEduPlanIds.includes(id))DB.deletedEduPlanIds.push(id);
+  if(EP_ID===id)EP_ID=null;
+  save();render();
+  sbDeleteEduPlan(id);
+  sbRecordDeletion('edu_plan',id); // 다른 브라우저에서도 이 삭제를 알 수 있도록 서버에 기록
+  toast('삭제되었습니다');
+}
+function updateEduHoliday(id,month,value){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  plan.holidays=plan.holidays||{};
+  if(value)plan.holidays[month]=value;else delete plan.holidays[month];
+  save();sbUpsertEduPlan(plan);
+}
+function addEduGroup(id){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const name=(prompt('새 대분류(구분) 이름을 입력해주세요 (예: 직영)')||'').trim();
+  if(!name)return;
+  plan.groups=plan.groups||[];
+  plan.groups.push({id:'g'+Date.now()+Math.random().toString(36).slice(2,6),name,countLabel:'',rows:[{id:'r'+Date.now()+Math.random().toString(36).slice(2,6),label:'',countLabel:'',cells:{}}]});
+  save();render();
+  sbUpsertEduPlan(plan);
+}
+function updateEduGroup(id,gid,field,value){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
+  g[field]=value;save();sbUpsertEduPlan(plan);
+}
+function deleteEduGroup(id,gid){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  if(!confirm('이 대분류(구분) 전체를 삭제하시겠습니까? 안의 모든 항목이 함께 삭제됩니다.'))return;
+  plan.groups=(plan.groups||[]).filter(g=>g.id!==gid);
+  save();render();
+  sbUpsertEduPlan(plan);
+}
+function addEduRow(id,gid){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
+  g.rows=g.rows||[];
+  g.rows.push({id:'r'+Date.now()+Math.random().toString(36).slice(2,6),label:'',countLabel:'',cells:{}});
+  save();render();
+  sbUpsertEduPlan(plan);
+}
+function updateEduRow(id,gid,rid,field,value){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
+  const r=(g.rows||[]).find(x=>x.id===rid);if(!r)return;
+  r[field]=value;save();sbUpsertEduPlan(plan);
+}
+function deleteEduRow(id,gid,rid){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
+  if((g.rows||[]).length<=1){toast('대분류 안에는 최소 1개 항목이 있어야 해요 — 그룹 자체를 지우려면 "🗑그룹"을 눌러주세요');return;}
+  if(!confirm('이 항목(행)을 삭제하시겠습니까?'))return;
+  g.rows=(g.rows||[]).filter(r=>r.id!==rid);
+  save();render();
+  sbUpsertEduPlan(plan);
+}
+function updateEduCell(id,gid,rid,month,value){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
+  const r=(g.rows||[]).find(x=>x.id===rid);if(!r)return;
+  r.cells=r.cells||{};
+  if(value)r.cells[month]=value;else delete r.cells[month];
+  save();sbUpsertEduPlan(plan);
+  toast('저장되었습니다');
+}
+function sbUpsertEduPlan(plan){
+  try{
+    fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/edu_plans',{
+      method:'POST',
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({id:plan.id,year:plan.year,title:plan.title||'',holidays:plan.holidays||{},groups:plan.groups||[]})
+    });
+  }catch(e){}
+}
+async function sbDeleteEduPlan(id){
+  try{
+    await fetch(`https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/edu_plans?id=eq.${id}`,{
+      method:'DELETE',
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+  }catch(e){}
+}
+async function syncEduPlans(){
+  try{
+    const rr=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/edu_plans?select=*',{
+      headers:{'apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM'}
+    });
+    if(!rr.ok)return; // edu_plans 테이블이 없으면 조용히 건너뜀
+    const rows=await rr.json();
+    if(!rows)return;
+    DB.eduPlans=DB.eduPlans||[];
+    const delSet=new Set(DB.deletedEduPlanIds||[]);
+    rows.forEach(row=>{
+      if(delSet.has(row.id))return; // 이 브라우저에서 이미 삭제한 연도는 다시 불러오지 않음
+      const existing=DB.eduPlans.find(p=>p.id===row.id);
+      const mapped={id:row.id,year:row.year,title:row.title||'',holidays:row.holidays||{},groups:row.groups||[]};
+      if(existing)Object.assign(existing,mapped);
+      else DB.eduPlans.push(mapped);
+    });
+    save();
+  }catch(e){console.warn('연간일정관리 동기화 오류:',e);}
+}
+const EP_MONTHS=['1','2','3','4','5','6','7','8','9','10','11','12'];
+function vEduPlan(){
+  const plans=epPlans();
+  if(!plans.length){
+    return `<div class="empty">등록된 연간 일정이 없습니다.</div>
+      <div class="row" style="margin-top:12px"><button class="btn primary sm" onclick="addEduYear()">＋ 연도 추가</button></div>`;
+  }
+  const plan=epCurrent();
+  const tabBar=`<div class="row" style="gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    ${plans.map(p=>{
+      const on=p.id===plan.id;
+      return `<span class="btn ${on?'primary':''} sm" style="cursor:pointer" onclick="EP_ID='${p.id}';render()">${p.year}년</span>`;
+    }).join('')}
+    <button class="btn sm" onclick="addEduYear()">＋ 연도 추가</button>
+  </div>`;
+
+  const header=`<div class="card" style="margin-bottom:14px"><div class="card-pad">
+    <div class="grid g2">
+      <div class="fld-group"><label class="fld">제목</label>
+        <input class="input" value="${esc(plan.title||'')}" onchange="updateEduTitle('${plan.id}',this.value)"></div>
+      <div class="fld-group"><label class="fld">연도</label>
+        <input class="input num" type="number" value="${plan.year}" onchange="updateEduYear('${plan.id}',this.value)"></div>
+    </div>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn sm ghost" style="color:#be185d" onclick="deleteEduYear('${plan.id}')">🗑 ${plan.year}년 일정 전체 삭제</button>
+    </div>
+  </div></div>`;
+
+  const groups=plan.groups||[];
+  const flat=[];
+  groups.forEach(g=>{
+    const rows=(g.rows&&g.rows.length)?g.rows:[{id:'r'+Math.random().toString(36).slice(2,8),label:'',countLabel:'',cells:{}}];
+    rows.forEach((r,ri)=>flat.push({g,r,isFirst:ri===0,span:rows.length}));
+  });
+
+  const monthHeadCells=EP_MONTHS.map(m=>`<th style="min-width:100px;text-align:center">${m}월</th>`).join('');
+  const holidayCells=EP_MONTHS.map(m=>`<td style="text-align:center"><input class="input" style="padding:3px 4px;font-size:.7rem;text-align:center;color:var(--ink3)" placeholder="-" value="${esc((plan.holidays||{})[m]||'')}" onchange="updateEduHoliday('${plan.id}','${m}',this.value)"></td>`).join('');
+
+  const bodyRows=flat.map(({g,r,isFirst,span})=>`<tr>
+    ${isFirst?`<td rowspan="${span}" style="vertical-align:top;min-width:120px;background:var(--bg2,rgba(127,127,127,.06))">
+      <input class="input" style="font-weight:800;font-size:.82rem" value="${esc(g.name||'')}" onchange="updateEduGroup('${plan.id}','${g.id}','name',this.value)">
+      <input class="input" style="font-size:.72rem;margin-top:4px;color:var(--ink3)" placeholder="예: 31회" value="${esc(g.countLabel||'')}" onchange="updateEduGroup('${plan.id}','${g.id}','countLabel',this.value)">
+      <div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn sm ghost" style="padding:2px 6px;font-size:.7rem" onclick="addEduRow('${plan.id}','${g.id}')">＋행</button>
+        <button class="btn sm ghost" style="padding:2px 6px;font-size:.7rem;color:#be185d" onclick="deleteEduGroup('${plan.id}','${g.id}')">🗑그룹</button>
+      </div>
+    </td>`:''}
+    <td style="min-width:120px;vertical-align:top">
+      <input class="input" style="font-size:.78rem;font-weight:700" placeholder="세부 항목명" value="${esc(r.label||'')}" onchange="updateEduRow('${plan.id}','${g.id}','${r.id}','label',this.value)">
+      <input class="input" style="font-size:.7rem;margin-top:2px;color:var(--ink3)" placeholder="예: 7회" value="${esc(r.countLabel||'')}" onchange="updateEduRow('${plan.id}','${g.id}','${r.id}','countLabel',this.value)">
+    </td>
+    ${EP_MONTHS.map(m=>`<td style="vertical-align:top"><textarea class="input" style="font-size:.72rem;min-height:48px;padding:4px 6px;resize:vertical;white-space:pre-wrap" onchange="updateEduCell('${plan.id}','${g.id}','${r.id}','${m}',this.value)">${esc((r.cells&&r.cells[m])||'')}</textarea></td>`).join('')}
+    <td style="vertical-align:top;text-align:center"><button class="btn sm ghost" style="padding:3px 6px" onclick="deleteEduRow('${plan.id}','${g.id}','${r.id}')">🗑</button></td>
+  </tr>`).join('');
+
+  const table=`<div class="card"><div class="card-pad" style="border-bottom:1px solid var(--border)">
+      <div class="spread"><div class="card-title">${plan.year}년 교육 운영 캘린더</div>
+        <button class="btn sm" onclick="addEduGroup('${plan.id}')">＋ 대분류(구분) 추가</button></div>
+    </div>
+    <div class="card-sub" style="padding:0 22px 8px">칸을 클릭해서 바로 입력·수정할 수 있어요. 셀 안에서 Shift+Enter로 줄바꿈할 수 있습니다.</div>
+    <div style="overflow-x:auto"><table class="tbl" style="min-width:1400px">
+      <thead><tr><th style="min-width:120px">구분</th><th style="min-width:120px">세부 항목</th>${monthHeadCells}<th style="min-width:50px"></th></tr></thead>
+      <tbody>
+        <tr style="background:var(--bg2,rgba(127,127,127,.06))"><td colspan="2" style="font-size:.75rem;color:var(--ink3);text-align:right;padding-right:8px">공휴일 표시</td>${holidayCells}<td></td></tr>
+        ${bodyRows||`<tr><td colspan="${2+EP_MONTHS.length+1}" style="text-align:center;color:var(--ink4);padding:20px">＋ 대분류(구분) 추가로 시작해주세요</td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+
+  return tabBar+header+table;
 }
 
 function vSettings(){
