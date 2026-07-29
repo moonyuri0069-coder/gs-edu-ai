@@ -5400,10 +5400,10 @@ function vEduPlan(){
       const has=c.text||c.place||c.date;
       return `<td>
         <div class="ep-cell-card ${has?'has':''}">
-          <textarea class="input ep-name" rows="2" placeholder="교육명" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','text',this.value)">${esc(c.text)}</textarea>
+          <textarea class="input ep-name" rows="2" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','text',this.value)">${esc(c.text)}</textarea>
           <div class="ep-sub-row">
-            <input class="input ep-sub" placeholder="📍장소" value="${esc(c.place)}" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','place',this.value)">
-            <input class="input ep-sub" placeholder="📅일자" value="${esc(c.date)}" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','date',this.value)">
+            <input class="input ep-sub" value="${esc(c.place)}" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','place',this.value)">
+            <input class="input ep-sub" value="${esc(c.date)}" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','date',this.value)">
           </div>
         </div>
       </td>`;
