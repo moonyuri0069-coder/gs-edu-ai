@@ -3659,6 +3659,12 @@ function flApplyHeader(header,rows){
     else if(hh.length<=15&&/근속/.test(hh))kind='tenure';
     else if(hh.length<=15&&/팀|점포|매장|지점/.test(hh))kind='store';
     else if(/^총\s*점수$|^총점$/.test(hh))kind='totalScore';
+    else if(/^\s*\[[^\]]+\]\s*$/.test(hh)){
+      // "[회계]"처럼 대괄호 안에 과목명만 있고 그 뒤에 문항 텍스트가 없는 열은 채점할 문항이 아니라
+      // 이미 계산되어 있는 그 과목의 점수를 그대로 담은 열(예: 붙여넣기로 넣은 과목별 점수표)
+      kind='subjectScore';
+      subject=flExtractBracketSubject(hh);
+    }
     else if(header.some(h2=>h2!==hh&&/^점수\s*-\s*/.test(h2)&&flNormForMatch(h2.replace(/^점수\s*-\s*/,''))===flNormForMatch(hh))){
       // 이 열의 짝이 되는 "점수 - X" 열이 있으면(과목 태그 유무와 무관하게) 그 열이 채점을 담당하므로 이 열은 기본 제외
       kind='ignore';
