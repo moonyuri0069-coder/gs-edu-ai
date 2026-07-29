@@ -3372,6 +3372,7 @@ const TESTLOG_ROLES=['점장','부점장','OFC','개점지원담당'];
 let TL_ROLE=TESTLOG_ROLES[0];
 let TL_Q='';
 let TL_TEST=null; // 선택된 테스트명 — null이면 테스트 목록 화면, 값이 있으면 그 테스트의 대쉬보드+개인별 성적 화면
+let TL_SEL=new Set(); // 개인별 성적 표에서 일괄수정/일괄삭제를 위해 체크된 레코드 id 모음
 let TL_BULK=null; // 추가/수정 draft: {mode,editId,role,testName,date,subjects:[],rows:[]}
 let TL_INLINE_OPEN=false; // "+ 테스트 결과 추가"를 눌렀을 때 팝업 대신 페이지 안에 표를 펼칠지 여부
 
@@ -4282,7 +4283,7 @@ function vTestLog(){
     ${TESTLOG_ROLES.map(r=>{
       const cnt=DB.testRecords.filter(x=>x.role===r).length;
       const on=TL_ROLE===r;
-      return `<button class="btn ${on?'primary':''} sm" onclick="TL_ROLE='${r}';TL_TEST=null;TL_Q='';rerender()">${esc(r)} <span style="opacity:.8">${cnt}</span></button>`;
+      return `<button class="btn ${on?'primary':''} sm" onclick="TL_ROLE='${r}';TL_TEST=null;TL_Q='';TL_SEL=new Set();rerender()">${esc(r)} <span style="opacity:.8">${cnt}</span></button>`;
     }).join('')}
     <span style="margin-left:auto"></span>
     <input class="input" id="tlSearchBox" style="max-width:220px" placeholder="${TL_TEST?'이름·사번·점포 검색':'테스트명 검색'}" value="${esc(TL_Q)}"
@@ -4311,7 +4312,7 @@ function vTestLog(){
       const avgS=avg(rows.map(r=>+r.score||0));
       const lastDate=rows.reduce((m,r)=>(r.date||'')>m?(r.date||''):m,'');
       const nameArg=JSON.stringify(name).replace(/"/g,'&quot;');
-      return `<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="TL_TEST=${nameArg};TL_Q='';TL_SORT={key:null,dir:1};render()">
+      return `<div class="card" style="margin-bottom:10px;cursor:pointer" onclick="TL_TEST=${nameArg};TL_Q='';TL_SORT={key:null,dir:1};TL_SEL=new Set();render()">
         <div class="card-pad spread" style="flex-wrap:wrap;gap:10px">
           <div>
             <div class="card-title">${esc(name)}</div>
@@ -4340,7 +4341,7 @@ function vTestLog(){
 
   const nameArgTop=JSON.stringify(TL_TEST).replace(/"/g,'&quot;');
   const backBar=`<div class="row" style="margin-bottom:12px;gap:10px;align-items:center;flex-wrap:wrap">
-    <button class="btn sm" onclick="TL_TEST=null;TL_Q='';render()">← 테스트 목록으로</button>
+    <button class="btn sm" onclick="TL_TEST=null;TL_Q='';TL_SEL=new Set();render()">← 테스트 목록으로</button>
     <div class="card-title" style="margin:0">${esc(TL_TEST)}</div>
     <button class="btn sm ghost" onclick="renameTestGroup('${TL_ROLE}',${nameArgTop})">✎ 이름 수정</button>
     <button class="btn sm ghost" onclick="exportTestCSV('${TL_ROLE}',${nameArgTop})">⬇ 엑셀(CSV) 내보내기</button>
@@ -4370,29 +4371,41 @@ function vTestLog(){
   allRows.forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
   const nameArg=JSON.stringify(TL_TEST).replace(/"/g,'&quot;');
 
+  const rowIds=rows.map(r=>r.id);
+  const allSelected=rowIds.length>0&&rowIds.every(id=>TL_SEL.has(id));
+  const rowIdsArg=JSON.stringify(rowIds).replace(/"/g,'&quot;');
+  const selBar=TL_SEL.size?`<span class="badge gray">${TL_SEL.size}명 선택됨</span>
+    <button class="btn sm" onclick="openBulkEditModal()">✎ 선택 일괄수정</button>
+    <button class="btn sm ghost" style="color:#be185d" onclick="tlBulkDeleteSelected()">🗑 선택 삭제</button>
+    <span style="cursor:pointer;color:var(--ink4);font-size:.8rem" onclick="TL_SEL=new Set();render()">선택 해제</span>`:'';
   const table=!rows.length?'<div class="empty">검색 결과가 없습니다.</div>':`<div class="card" style="margin-bottom:14px">
       <div class="card-pad" style="border-bottom:1px solid var(--border)">
-        <div class="spread">
+        <div class="spread" style="flex-wrap:wrap;gap:8px">
           <div class="card-title">개인별 성적</div>
-          <button class="btn sm" onclick="addGroupSubject('${TL_ROLE}',${nameArg})">＋ 과목</button>
+          <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+            ${selBar}
+            <button class="btn sm" onclick="addGroupSubject('${TL_ROLE}',${nameArg})">＋ 과목</button>
+          </div>
         </div>
       </div>
-      <div class="card-sub" style="padding:0 22px 8px">값은 표에서 바로 클릭해서 수정할 수 있고, 열 제목 옆 ✕로 필요 없는 열을 숨기거나 제목을 클릭해 정렬할 수 있어요.</div>
+      <div class="card-sub" style="padding:0 22px 8px">값은 표에서 바로 클릭해서 수정할 수 있고, 열 제목 옆 ✕로 필요 없는 열을 숨기거나 제목을 클릭해 정렬할 수 있어요. 왼쪽 체크박스로 여러 명을 선택하면 일괄수정·일괄삭제를 할 수 있어요.</div>
       <div style="overflow-x:auto"><table class="tbl">
         <thead><tr>
+          <th style="width:32px;text-align:center"><input type="checkbox" ${allSelected?'checked':''} onchange="tlToggleSelAll(${rowIdsArg},this.checked)"></th>
           ${colsBefore.map(c=>`<th style="${c.thStyle||''}"><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol('${c.key}')">${esc(c.label.trim())}${tlSortArrow(c.key)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(c.label.trim())}' 열 숨기기" onclick="toggleTestCol('${TL_ROLE}','${c.key}')">✕</span></th>`).join('')}
           <th><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol('person')">성명${tlSortArrow('person')}</span></th>
           ${colsAfter.map(c=>`<th style="${c.thStyle||''}"><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol('${c.key}')">${esc(c.label.trim())}${tlSortArrow(c.key)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(c.label.trim())}' 열 숨기기" onclick="toggleTestCol('${TL_ROLE}','${c.key}')">✕</span></th>`).join('')}
-          ${subjNames.map(sn=>{const sArg=JSON.stringify(sn).replace(/"/g,'&quot;');return `<th style="text-align:center;min-width:64px"><span style="cursor:pointer" title="클릭하여 정렬" onclick="sortTestCol(${sArg})">${esc(sn)}${tlSortArrow(sn)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(sn)}' 과목 삭제" onclick="removeGroupSubject('${TL_ROLE}',${nameArg},${sArg})">✕</span></th>`;}).join('')}
+          ${subjNames.map(sn=>{const sArg=JSON.stringify(sn).replace(/"/g,'&quot;');return `<th style="text-align:center;min-width:70px"><span style="cursor:pointer" title="이 과목 문항만 따로 채점한 정답률(%)이에요 · 클릭하여 정렬" onclick="sortTestCol(${sArg})">${esc(sn)}<span style="font-weight:400;color:var(--ink4)">(%)</span>${tlSortArrow(sn)}</span> <span style="cursor:pointer;color:var(--ink4)" title="'${esc(sn)}' 과목 삭제" onclick="removeGroupSubject('${TL_ROLE}',${nameArg},${sArg})">✕</span></th>`;}).join('')}
           <th></th>
         </tr></thead>
         <tbody>${rows.map(r=>{
           const subjCell=sn=>{
             const f=(r.subjects||[]).find(s=>s.name===sn);
             const v=(f&&f.score!==''&&f.score!=null)?f.score:'';
-            return `<td><input class="input num" style="padding:4px 6px;font-size:.78rem;width:52px;text-align:center" value="${esc(String(v))}" onchange="updateTestSubject('${r.id}',${JSON.stringify(sn).replace(/"/g,'&quot;')},this.value)"></td>`;
+            return `<td><span style="display:inline-flex;align-items:center;gap:2px"><input class="input num" style="padding:4px 6px;font-size:.78rem;width:48px;text-align:center" value="${esc(String(v))}" onchange="updateTestSubject('${r.id}',${JSON.stringify(sn).replace(/"/g,'&quot;')},this.value)"><span style="color:var(--ink4);font-size:.74rem">%</span></span></td>`;
           };
           return `<tr>
+          <td style="text-align:center"><input type="checkbox" ${TL_SEL.has(r.id)?'checked':''} onchange="tlToggleSel('${r.id}')"></td>
           ${colsBefore.map(c=>c.cell(r)).join('')}
           <td style="font-weight:700;white-space:nowrap">${esc(r.person||'-')}</td>
           ${colsAfter.map(c=>c.cell(r)).join('')}
@@ -4404,10 +4417,11 @@ function vTestLog(){
           </td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr style="background:var(--bg2,rgba(127,127,127,.08));font-weight:800">
+          <td></td>
           ${colsBefore.map(c=>tlAvgFooterCell(c,rows)).join('')}
           <td style="white-space:nowrap">평균</td>
           ${colsAfter.map(c=>tlAvgFooterCell(c,rows)).join('')}
-          ${subjNames.map(sn=>`<td style="text-align:center">${tlAvgOf(rows,r=>{const s=(r.subjects||[]).find(x=>x.name===sn);return s?s.score:'';})}</td>`).join('')}
+          ${subjNames.map(sn=>{const a=tlAvgOf(rows,r=>{const s=(r.subjects||[]).find(x=>x.name===sn);return s?s.score:'';});return `<td style="text-align:center">${a}${a!=='-'?'%':''}</td>`;}).join('')}
           <td></td>
         </tr></tfoot>
       </table></div>
@@ -4511,7 +4525,7 @@ function exportTestCSV(role,testName){
   if(!targets.length){toast('내보낼 데이터가 없습니다');return;}
   const subjNames=[];
   targets.forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
-  const header=['팀','성명','사번','근속','응시일','총점수',...subjNames,'전차수 대비','통과여부','비고'];
+  const header=['팀','성명','사번','근속','응시일','총점수',...subjNames.map(sn=>sn+'(%)'),'전차수 대비','통과여부','비고'];
   const rows=[header,...targets.map(r=>{
     const subjVals=subjNames.map(sn=>{const s=(r.subjects||[]).find(x=>x.name===sn);return (s&&s.score!==''&&s.score!=null)?s.score:'';});
     const prev=tlPrevRecord(r.role,r.empNo,r.date,r.id);
@@ -4607,7 +4621,7 @@ function renderTlSubjectChips(){
 function renderTlRowsTable(){
   const el=$('#tlRowsWrap');if(!el)return;
   const subj=TL_BULK.subjects;
-  const head=`<tr><th>팀</th><th>성명</th><th>사번</th><th>근속</th><th style="width:70px">총점수</th>${subj.map(s=>`<th>${esc(s)}</th>`).join('')}<th style="width:90px">통과여부</th><th style="min-width:120px">비고</th>${TL_BULK.mode==='add'?'<th></th>':''}</tr>`;
+  const head=`<tr><th>팀</th><th>성명</th><th>사번</th><th>근속</th><th style="width:70px">총점수</th>${subj.map(s=>`<th>${esc(s)}<span style="font-weight:400;color:var(--ink4)">(%)</span></th>`).join('')}<th style="width:90px">통과여부</th><th style="min-width:120px">비고</th>${TL_BULK.mode==='add'?'<th></th>':''}</tr>`;
   const body=TL_BULK.rows.map((r,i)=>`<tr>
     <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.team||'')}" oninput="TL_BULK.rows[${i}].team=this.value"></td>
     <td><input class="input" style="padding:5px 6px;font-size:.78rem" value="${esc(r.person||'')}" oninput="TL_BULK.rows[${i}].person=this.value"></td>
@@ -4754,8 +4768,90 @@ function deleteTestGroup(role,testName,ev){
     sbDeleteFormLink(cfg.id);
   }
   if(TL_TEST===testName)TL_TEST=null;
+  TL_SEL=new Set();
   save();render();
   toast(`"${testName}" 테스트 기록 ${targets.length}건이 삭제되었습니다`);
+}
+
+/* ── 개인별 성적 표 체크박스 선택 → 일괄수정/일괄삭제 ── */
+function tlToggleSel(id){
+  if(TL_SEL.has(id))TL_SEL.delete(id);else TL_SEL.add(id);
+  render();
+}
+function tlToggleSelAll(ids,checked){
+  if(checked)ids.forEach(id=>TL_SEL.add(id));
+  else ids.forEach(id=>TL_SEL.delete(id));
+  render();
+}
+function tlBulkDeleteSelected(){
+  const ids=[...TL_SEL];
+  if(!ids.length)return;
+  if(!confirm(`선택한 ${ids.length}명의 응시 기록을 삭제하시겠습니까? 되돌릴 수 없습니다.`))return;
+  DB.testRecords=(DB.testRecords||[]).filter(r=>!ids.includes(r.id));
+  DB.deletedTestRecordIds=DB.deletedTestRecordIds||[];
+  ids.forEach(id=>{
+    if(!DB.deletedTestRecordIds.includes(id))DB.deletedTestRecordIds.push(id);
+    sbDeleteTestRecord(id);
+    sbRecordDeletion('test_record',id); // 다른 브라우저에서도 이 삭제를 알 수 있도록 서버에 기록
+  });
+  TL_SEL=new Set();
+  save();render();
+  toast(`${ids.length}명의 기록이 삭제되었습니다`);
+}
+let TL_BULKEDIT=null; // 일괄수정 draft: {field,value}
+function openBulkEditModal(){
+  if(!TL_SEL.size){toast('먼저 표에서 체크박스로 대상을 선택해주세요');return;}
+  const subjNames=[];
+  (DB.testRecords||[]).filter(r=>TL_SEL.has(r.id)).forEach(r=>(r.subjects||[]).forEach(s=>{if(!subjNames.includes(s.name))subjNames.push(s.name);}));
+  TL_BULKEDIT={field:'store',value:'',subjNames};
+  renderBulkEditModal();
+}
+function renderBulkEditModal(){
+  const b=TL_BULKEDIT;if(!b)return;
+  const fieldOpts=[['store','팀'],['tenure','근속'],['date','응시일'],['score','총점수'],['passed','통과여부'],['memo','비고'],
+    ...b.subjNames.map(sn=>['subj:'+sn,'과목 · '+sn])];
+  let valueField='';
+  if(b.field==='passed'){
+    valueField=`<select class="select" id="bulkEditVal"><option value="1" ${b.value==='1'?'selected':''}>합격</option><option value="0" ${b.value==='0'?'selected':''}>불합격</option></select>`;
+  }else if(b.field==='date'){
+    valueField=`<input class="input" id="bulkEditVal" type="date" value="${esc(b.value)}">`;
+  }else if(b.field==='score'||b.field.startsWith('subj:')){
+    valueField=`<input class="input num" id="bulkEditVal" type="number" value="${esc(b.value)}" placeholder="0~100">`;
+  }else{
+    valueField=`<input class="input" id="bulkEditVal" value="${esc(b.value)}">`;
+  }
+  const body=`<div class="card-sub" style="margin-bottom:10px">선택한 <b>${TL_SEL.size}명</b> 모두에게 한 번에 같은 값을 적용합니다.</div>
+    <div class="fld-group"><label class="fld">수정할 항목</label>
+      <select class="select" onchange="TL_BULKEDIT.field=this.value;TL_BULKEDIT.value='';renderBulkEditModal()">
+        ${fieldOpts.map(([v,l])=>`<option value="${v}" ${b.field===v?'selected':''}>${l}</option>`).join('')}
+      </select></div>
+    <div class="fld-group"><label class="fld">적용할 값</label>${valueField}</div>`;
+  openModal('✎ 선택 항목 일괄수정',body,`<button class="btn" onclick="closeModal()">취소</button><button class="btn primary" onclick="applyBulkEdit()">적용</button>`);
+}
+function applyBulkEdit(){
+  const b=TL_BULKEDIT;if(!b)return;
+  const el=document.getElementById('bulkEditVal');
+  const val=el?el.value:'';
+  const ids=[...TL_SEL];
+  ids.forEach(id=>{
+    const rec=(DB.testRecords||[]).find(r=>r.id===id);if(!rec)return;
+    if(b.field.startsWith('subj:')){
+      const name=b.field.slice(5);
+      rec.subjects=rec.subjects||[];
+      let s=rec.subjects.find(x=>x.name===name);
+      if(!s){s={name,score:''};rec.subjects.push(s);}
+      s.score=val===''?'':(+val||0);
+    }else if(b.field==='score'){
+      rec.score=val===''?'':Math.max(0,Math.min(100,+val||0));
+    }else if(b.field==='passed'){
+      rec.passed=(val==='1');
+    }else{
+      rec[b.field]=val;
+    }
+    sbUpsertTestRecord(rec);
+  });
+  save();closeModal();render();
+  toast(`${ids.length}명에게 일괄 적용되었습니다`);
 }
 
 /* ── Supabase 연동 (공유를 위해 test_records 테이블 사용 — 사전에 테이블 생성 필요) ── */
