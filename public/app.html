@@ -289,6 +289,50 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 /* 교육생안내 미리보기 폰트 축소 */
 #slideScale *{font-size:100%!important}
+
+/* ═══ 연간일정관리 ═══ */
+.ep-tabs .btn{font-weight:700}
+.ep-head{background:linear-gradient(135deg,var(--green-soft),var(--surface));border:1px solid var(--green-line)}
+.ep-wrap{overflow:auto;border-radius:var(--r);border:1px solid var(--border);max-height:76vh;background:var(--surface)}
+table.ep-table{border-collapse:separate;border-spacing:0;width:100%;min-width:1620px;font-size:.82rem}
+.ep-table th{position:sticky;top:0;z-index:5;background:var(--surface2);color:var(--ink2);
+  font-weight:800;padding:10px 6px;border-bottom:2px solid var(--border);text-align:center;white-space:nowrap}
+.ep-th-corner1{position:sticky;left:0;top:0;z-index:7;background:var(--surface2)}
+.ep-th-corner2{position:sticky;left:132px;top:0;z-index:7;background:var(--surface2)}
+.ep-td-group{position:sticky;left:0;z-index:3;width:132px;min-width:132px;border-right:1px solid var(--border)}
+.ep-td-row{position:sticky;left:132px;z-index:2;width:140px;min-width:140px;border-right:2px solid var(--border)}
+.ep-table td{padding:6px;border-bottom:1px solid var(--border);vertical-align:top}
+.ep-holiday-row td{background:#fdf6e3;border-bottom:2px solid #edd9a3}
+[data-theme="dark"] .ep-holiday-row td{background:#332c14;border-bottom:2px solid #5c4d1e}
+.ep-holiday-input{background:transparent!important;border:none!important;font-weight:700;color:#92720d!important}
+[data-theme="dark"] .ep-holiday-input{color:#e0c060!important}
+.ep-group-name{font-weight:800;font-size:.86rem;border:none!important;background:transparent!important;padding:2px 4px!important}
+.ep-group-count{font-size:.68rem;font-weight:700;border:none!important;background:transparent!important;padding:2px 4px!important;
+  display:inline-block;border-radius:99px;padding:2px 8px!important;margin-top:4px}
+.ep-row-label{font-weight:700;font-size:.8rem;border:none!important;background:transparent!important;padding:2px 4px!important}
+.ep-row-count{font-size:.68rem;border:none!important;background:transparent!important;padding:2px 4px!important;color:var(--ink3)}
+.ep-cell-card{border-radius:9px;border:1px solid transparent;padding:5px 6px;transition:box-shadow .15s,border-color .15s;min-height:64px}
+.ep-cell-card.has{box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.ep-cell-card:hover,.ep-cell-card:focus-within{border-color:var(--green-line);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.ep-name{width:100%;border:none!important;background:transparent!important;font-weight:700;font-size:.76rem;resize:vertical;
+  padding:2px 2px!important;min-height:34px;line-height:1.35}
+.ep-sub-row{display:flex;gap:4px;margin-top:3px}
+.ep-sub{flex:1;min-width:0;border:none!important;background:rgba(127,127,127,.08)!important;border-radius:6px!important;
+  font-size:.66rem!important;padding:3px 5px!important;color:var(--ink2)}
+.ep-g0{background:#eef4ff}.ep-g0b{border-left:4px solid #93c5fd}
+.ep-g1{background:#eefcf3}.ep-g1b{border-left:4px solid #86efac}
+.ep-g2{background:#fdf4ff}.ep-g2b{border-left:4px solid #d8b4fe}
+.ep-g3{background:#fff8ed}.ep-g3b{border-left:4px solid #fdba74}
+.ep-g4{background:#fef2f4}.ep-g4b{border-left:4px solid #fca5a5}
+[data-theme="dark"] .ep-g0{background:#16233a}[data-theme="dark"] .ep-g1{background:#123423}
+[data-theme="dark"] .ep-g2{background:#301a38}[data-theme="dark"] .ep-g3{background:#3a2a12}
+[data-theme="dark"] .ep-g4{background:#3a1620}
+.ep-g0 .ep-cell-card.has{background:#dce9ff}.ep-g1 .ep-cell-card.has{background:#d7f7e3}
+.ep-g2 .ep-cell-card.has{background:#f6def9}.ep-g3 .ep-cell-card.has{background:#ffe9c9}
+.ep-g4 .ep-cell-card.has{background:#fddce1}
+[data-theme="dark"] .ep-g0 .ep-cell-card.has{background:#203255}[data-theme="dark"] .ep-g1 .ep-cell-card.has{background:#164a30}
+[data-theme="dark"] .ep-g2 .ep-cell-card.has{background:#432a4d}[data-theme="dark"] .ep-g3 .ep-cell-card.has{background:#4d3915}
+[data-theme="dark"] .ep-g4 .ep-cell-card.has{background:#4d2029}
 </style>
 </head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -5226,12 +5270,23 @@ function deleteEduRow(id,gid,rid){
   save();render();
   sbUpsertEduPlan(plan);
 }
-function updateEduCell(id,gid,rid,month,value){
+// 셀 값은 {text,place,date} 객체로 저장 — 이전에는 문자열(교육명)만 저장했으므로
+// 그 옛 데이터도 그대로 읽을 수 있도록 여기서 통일된 형태로 변환해줌
+function epCellVal(r,m){
+  const v=r&&r.cells&&r.cells[m];
+  if(v==null)return{text:'',place:'',date:''};
+  if(typeof v==='string')return{text:v,place:'',date:''};
+  return{text:v.text||'',place:v.place||'',date:v.date||''};
+}
+function updateEduCellField(id,gid,rid,month,field,value){
   const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
   const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
   const r=(g.rows||[]).find(x=>x.id===rid);if(!r)return;
   r.cells=r.cells||{};
-  if(value)r.cells[month]=value;else delete r.cells[month];
+  const cur=epCellVal(r,month);
+  cur[field]=value;
+  if(!cur.text&&!cur.place&&!cur.date)delete r.cells[month];
+  else r.cells[month]=cur;
   save();sbUpsertEduPlan(plan);
   toast('저장되었습니다');
 }
@@ -5273,6 +5328,8 @@ async function syncEduPlans(){
   }catch(e){console.warn('연간일정관리 동기화 오류:',e);}
 }
 const EP_MONTHS=['1','2','3','4','5','6','7','8','9','10','11','12'];
+const EP_GCLASS=['ep-g0','ep-g1','ep-g2','ep-g3','ep-g4']; // 대분류(구분)마다 순서대로 색을 돌려가며 입혀서 한눈에 구분되게 함
+const EP_GCOLORS=['#93c5fd','#86efac','#d8b4fe','#fdba74','#fca5a5']; // 위 클래스와 짝이 되는 실제 색상값(범례 점 표시용)
 function vEduPlan(){
   const plans=epPlans();
   if(!plans.length){
@@ -5280,18 +5337,18 @@ function vEduPlan(){
       <div class="row" style="margin-top:12px"><button class="btn primary sm" onclick="addEduYear()">＋ 연도 추가</button></div>`;
   }
   const plan=epCurrent();
-  const tabBar=`<div class="row" style="gap:6px;margin-bottom:14px;flex-wrap:wrap">
+  const tabBar=`<div class="row ep-tabs" style="gap:6px;margin-bottom:14px;flex-wrap:wrap">
     ${plans.map(p=>{
       const on=p.id===plan.id;
-      return `<span class="btn ${on?'primary':''} sm" style="cursor:pointer" onclick="EP_ID='${p.id}';render()">${p.year}년</span>`;
+      return `<span class="btn ${on?'primary':''} sm" style="cursor:pointer" onclick="EP_ID='${p.id}';render()">📅 ${p.year}년</span>`;
     }).join('')}
     <button class="btn sm" onclick="addEduYear()">＋ 연도 추가</button>
   </div>`;
 
-  const header=`<div class="card" style="margin-bottom:14px"><div class="card-pad">
+  const header=`<div class="card ep-head" style="margin-bottom:14px"><div class="card-pad">
     <div class="grid g2">
       <div class="fld-group"><label class="fld">제목</label>
-        <input class="input" value="${esc(plan.title||'')}" onchange="updateEduTitle('${plan.id}',this.value)"></div>
+        <input class="input" style="font-weight:700" value="${esc(plan.title||'')}" onchange="updateEduTitle('${plan.id}',this.value)"></div>
       <div class="fld-group"><label class="fld">연도</label>
         <input class="input num" type="number" value="${plan.year}" onchange="updateEduYear('${plan.id}',this.value)"></div>
     </div>
@@ -5302,40 +5359,67 @@ function vEduPlan(){
 
   const groups=plan.groups||[];
   const flat=[];
-  groups.forEach(g=>{
+  groups.forEach((g,gi)=>{
     const rows=(g.rows&&g.rows.length)?g.rows:[{id:'r'+Math.random().toString(36).slice(2,8),label:'',countLabel:'',cells:{}}];
-    rows.forEach((r,ri)=>flat.push({g,r,isFirst:ri===0,span:rows.length}));
+    rows.forEach((r,ri)=>flat.push({g,r,gi,isFirst:ri===0,span:rows.length}));
   });
 
-  const monthHeadCells=EP_MONTHS.map(m=>`<th style="min-width:100px;text-align:center">${m}월</th>`).join('');
-  const holidayCells=EP_MONTHS.map(m=>`<td style="text-align:center"><input class="input" style="padding:3px 4px;font-size:.7rem;text-align:center;color:var(--ink3)" placeholder="-" value="${esc((plan.holidays||{})[m]||'')}" onchange="updateEduHoliday('${plan.id}','${m}',this.value)"></td>`).join('');
+  const monthHeadCells=EP_MONTHS.map(m=>`<th>${m}월</th>`).join('');
+  const holidayCells=EP_MONTHS.map(m=>`<td style="text-align:center">
+    <input class="input ep-holiday-input" style="padding:3px 4px;font-size:.72rem;text-align:center" placeholder="-" value="${esc((plan.holidays||{})[m]||'')}" onchange="updateEduHoliday('${plan.id}','${m}',this.value)">
+  </td>`).join('');
 
-  const bodyRows=flat.map(({g,r,isFirst,span})=>`<tr>
-    ${isFirst?`<td rowspan="${span}" style="vertical-align:top;min-width:120px;background:var(--bg2,rgba(127,127,127,.06))">
-      <input class="input" style="font-weight:800;font-size:.82rem" value="${esc(g.name||'')}" onchange="updateEduGroup('${plan.id}','${g.id}','name',this.value)">
-      <input class="input" style="font-size:.72rem;margin-top:4px;color:var(--ink3)" placeholder="예: 31회" value="${esc(g.countLabel||'')}" onchange="updateEduGroup('${plan.id}','${g.id}','countLabel',this.value)">
-      <div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">
-        <button class="btn sm ghost" style="padding:2px 6px;font-size:.7rem" onclick="addEduRow('${plan.id}','${g.id}')">＋행</button>
-        <button class="btn sm ghost" style="padding:2px 6px;font-size:.7rem;color:#be185d" onclick="deleteEduGroup('${plan.id}','${g.id}')">🗑그룹</button>
+  const bodyRows=flat.map(({g,r,gi,isFirst,span})=>{
+    const gcls=EP_GCLASS[gi%EP_GCLASS.length];
+    return `<tr class="${gcls}">
+    ${isFirst?`<td rowspan="${span}" class="ep-td-group ${gcls} ${gcls}b">
+      <input class="input ep-group-name" value="${esc(g.name||'')}" onchange="updateEduGroup('${plan.id}','${g.id}','name',this.value)">
+      <input class="input ep-group-count badge gray" placeholder="예: 31회" value="${esc(g.countLabel||'')}" onchange="updateEduGroup('${plan.id}','${g.id}','countLabel',this.value)">
+      <div class="row" style="gap:4px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn sm ghost" style="padding:2px 6px;font-size:.68rem" onclick="addEduRow('${plan.id}','${g.id}')">＋행</button>
+        <button class="btn sm ghost" style="padding:2px 6px;font-size:.68rem;color:#be185d" onclick="deleteEduGroup('${plan.id}','${g.id}')">🗑그룹</button>
       </div>
     </td>`:''}
-    <td style="min-width:120px;vertical-align:top">
-      <input class="input" style="font-size:.78rem;font-weight:700" placeholder="세부 항목명" value="${esc(r.label||'')}" onchange="updateEduRow('${plan.id}','${g.id}','${r.id}','label',this.value)">
-      <input class="input" style="font-size:.7rem;margin-top:2px;color:var(--ink3)" placeholder="예: 7회" value="${esc(r.countLabel||'')}" onchange="updateEduRow('${plan.id}','${g.id}','${r.id}','countLabel',this.value)">
+    <td class="ep-td-row ${gcls}">
+      <div class="row" style="gap:2px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <input class="input ep-row-label" placeholder="세부 항목명" value="${esc(r.label||'')}" onchange="updateEduRow('${plan.id}','${g.id}','${r.id}','label',this.value)">
+          <input class="input ep-row-count" placeholder="예: 7회" value="${esc(r.countLabel||'')}" onchange="updateEduRow('${plan.id}','${g.id}','${r.id}','countLabel',this.value)">
+        </div>
+        <span style="cursor:pointer;color:var(--ink4);font-size:.85rem;padding:2px" title="이 행(세부 항목) 삭제" onclick="deleteEduRow('${plan.id}','${g.id}','${r.id}')">🗑</span>
+      </div>
     </td>
-    ${EP_MONTHS.map(m=>`<td style="vertical-align:top"><textarea class="input" style="font-size:.72rem;min-height:48px;padding:4px 6px;resize:vertical;white-space:pre-wrap" onchange="updateEduCell('${plan.id}','${g.id}','${r.id}','${m}',this.value)">${esc((r.cells&&r.cells[m])||'')}</textarea></td>`).join('')}
-    <td style="vertical-align:top;text-align:center"><button class="btn sm ghost" style="padding:3px 6px" onclick="deleteEduRow('${plan.id}','${g.id}','${r.id}')">🗑</button></td>
-  </tr>`).join('');
+    ${EP_MONTHS.map(m=>{
+      const c=epCellVal(r,m);
+      const has=c.text||c.place||c.date;
+      return `<td>
+        <div class="ep-cell-card ${has?'has':''}">
+          <textarea class="input ep-name" rows="2" placeholder="교육명" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','text',this.value)">${esc(c.text)}</textarea>
+          <div class="ep-sub-row">
+            <input class="input ep-sub" placeholder="📍장소" value="${esc(c.place)}" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','place',this.value)">
+            <input class="input ep-sub" placeholder="📅일자" value="${esc(c.date)}" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','date',this.value)">
+          </div>
+        </div>
+      </td>`;
+    }).join('')}
+    <td style="text-align:center"><button class="btn sm ghost" style="padding:3px 6px" onclick="deleteEduRow('${plan.id}','${g.id}','${r.id}')">🗑</button></td>
+  </tr>`;}).join('');
+
+  const legend=groups.length?`<div class="row" style="gap:10px;flex-wrap:wrap;margin:0 22px 10px">
+    ${groups.map((g,gi)=>`<span class="badge gray" style="display:inline-flex;align-items:center;gap:6px">
+      <span style="width:10px;height:10px;border-radius:3px;display:inline-block;background:${EP_GCOLORS[gi%EP_GCOLORS.length]}"></span>${esc(g.name||'(이름없음)')}</span>`).join('')}
+  </div>`:'';
 
   const table=`<div class="card"><div class="card-pad" style="border-bottom:1px solid var(--border)">
-      <div class="spread"><div class="card-title">${plan.year}년 교육 운영 캘린더</div>
-        <button class="btn sm" onclick="addEduGroup('${plan.id}')">＋ 대분류(구분) 추가</button></div>
+      <div class="spread"><div class="card-title">📆 ${plan.year}년 교육 운영 캘린더</div>
+        <button class="btn sm primary" onclick="addEduGroup('${plan.id}')">＋ 대분류(구분) 추가</button></div>
     </div>
-    <div class="card-sub" style="padding:0 22px 8px">칸을 클릭해서 바로 입력·수정할 수 있어요. 셀 안에서 Shift+Enter로 줄바꿈할 수 있습니다.</div>
-    <div style="overflow-x:auto"><table class="tbl" style="min-width:1400px">
-      <thead><tr><th style="min-width:120px">구분</th><th style="min-width:120px">세부 항목</th>${monthHeadCells}<th style="min-width:50px"></th></tr></thead>
+    ${legend}
+    <div class="card-sub" style="padding:0 22px 10px">칸을 클릭해서 교육명·장소·일자를 바로 입력·수정할 수 있어요. 위/왼쪽을 고정해서 스크롤해도 어느 달·어느 항목인지 한눈에 보여요.</div>
+    <div class="ep-wrap"><table class="ep-table">
+      <thead><tr><th class="ep-th-corner1">구분</th><th class="ep-th-corner2">세부 항목</th>${monthHeadCells}<th style="min-width:44px"></th></tr></thead>
       <tbody>
-        <tr style="background:var(--bg2,rgba(127,127,127,.06))"><td colspan="2" style="font-size:.75rem;color:var(--ink3);text-align:right;padding-right:8px">공휴일 표시</td>${holidayCells}<td></td></tr>
+        <tr class="ep-holiday-row"><td class="ep-td-group"></td><td class="ep-td-row" style="font-size:.75rem;font-weight:700;color:#92720d;text-align:right;padding-right:8px">🎌 공휴일</td>${holidayCells}<td></td></tr>
         ${bodyRows||`<tr><td colspan="${2+EP_MONTHS.length+1}" style="text-align:center;color:var(--ink4);padding:20px">＋ 대분류(구분) 추가로 시작해주세요</td></tr>`}
       </tbody>
     </table></div>
