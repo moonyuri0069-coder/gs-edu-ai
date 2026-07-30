@@ -1035,8 +1035,9 @@ async function syncFromSupabase(){
           surveyExtra:t.survey_extra||(existing?existing.surveyExtra:null)||[],
           // 강사피드백도 다른 사람이 작성한 게 보이도록 서버 값을 받아옴 (없으면 로컬 값 유지)
           feedback:(t.feedback&&Object.keys(t.feedback).length?t.feedback:null)||(existing?existing.feedback:null)||{},
-          // 결과보고서 "기타 보고 사항"도 다른 사람이 쓴 내용이 보이도록 서버 값을 받아옴
-          reportEtc:t.report_etc||(existing?existing.reportEtc:'')||''};
+          // 결과보고서·교육진행안 "기타 보고 사항"도 다른 사람이 쓴 내용이 보이도록 서버 값을 받아옴
+          reportEtc:t.report_etc||(existing?existing.reportEtc:'')||'',
+          agendaEtc:t.agenda_etc||(existing?existing.agendaEtc:'')||''};
         if(existing){Object.assign(existing,mapped);}
         else{DB.trainings.push(mapped);}
       });
@@ -3172,7 +3173,7 @@ function renderAgendaDoc(t){
     <div contenteditable="${session?'true':'false'}"
       id="agEtc"
       style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.82rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
-      onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaEtc=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_head:tr.agendaHead,subtitle:tr.subtitle||''});}">
+      onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaEtc=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_etc:tr.agendaEtc});}">
       ${esc(t.agendaEtc||'')}
     </div>
   </div>
@@ -5599,23 +5600,70 @@ function vHistory(){
       <button class="btn sm ghost" onclick="downloadHistoryRaw()">⬇ 목록 다운로드(txt)</button></div>
     ${list}`;
 }
+// 히스토리 리포트에 쓸 실제 숫자(대시보드 지표)는 AI가 지어내지 않도록 여기서 직접 계산
+function historyMeta(){
+  const T=HIST_YEAR?DB.trainings.filter(t=>t.date.startsWith(HIST_YEAR)):DB.trainings;
+  const totalAvg=avg(T.filter(t=>respOf(t.id).length).map(t=>trainingAvg(t.id)));
+  const respCount=DB.responses.filter(r=>T.find(t=>t.id===r.trainingId)).length;
+  const entries=buildHistoryEntries(HIST_YEAR).filter(x=>HIST_TYPES.includes(x.type));
+  const typeCounts={};
+  entries.forEach(e=>{typeCounts[e.type]=(typeCounts[e.type]||0)+1;});
+  return{trainingCount:T.length,avgScore:totalAvg,respCount,entryCount:entries.length,typeCounts};
+}
 function renderHistoryAiSection(){
   const cached=(DB.historyAI||{})[histKey()];
-  if(cached){
-    return `<div class="card" style="padding:16px;background:var(--bg2,rgba(127,127,127,.06))">
-      <div class="spread" style="margin-bottom:8px;gap:8px;flex-wrap:wrap">
-        <div class="card-title" style="margin:0">✨ AI 히스토리 리포트 — ${esc(histKey())}</div>
-        <div class="row" style="gap:6px">
-          <button class="btn sm ghost" onclick="downloadHistoryReport()">⬇ 리포트 다운로드</button>
-          <button class="btn sm ghost" onclick="runHistoryAi()">↻ 다시 생성</button>
-        </div>
+  if(cached&&cached.data){
+    const d=cached.data,m=cached.meta||historyMeta();
+    const bullets=(arr)=>(arr&&arr.length)?`<ul style="margin:0;padding-left:18px;line-height:1.9">${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<div class="card-sub">해당 사항 없음</div>';
+    const noteBullets=(arr)=>(arr&&arr.length)?`<ul style="margin:0;padding-left:18px;line-height:1.9">${arr.map(x=>`<li><b>${esc(x.name||'')}</b>${x.name?' — ':''}${esc(x.note||'')}</li>`).join('')}</ul>`:'<div class="card-sub">해당 사항 없음</div>';
+    return `<div id="historyReportA4" class="report-a4" style="border:1px solid var(--border);border-radius:10px">
+      <div class="rp-p1-title">📊 GS더프레시 교육 히스토리 리포트</div>
+      <div class="rp-subtitle">집계 기간: ${esc(histKey())} · 생성 시각: ${esc(new Date(cached.at).toLocaleString('ko-KR'))} · 사업기획팀</div>
+      <div class="rp-kpi-row">
+        <div class="rp-kpi-badge"><div class="k-val">${m.trainingCount}</div><div class="k-lbl">총 교육 수</div></div>
+        <div class="rp-kpi-badge"><div class="k-val">${m.avgScore?f1(m.avgScore):'-'}</div><div class="k-lbl">평균 만족도(5점)</div></div>
+        <div class="rp-kpi-badge"><div class="k-val">${m.respCount}</div><div class="k-lbl">총 응답자</div></div>
+        <div class="rp-kpi-badge"><div class="k-val">${m.entryCount}</div><div class="k-lbl">히스토리 항목</div></div>
       </div>
-      <div style="font-size:.86rem;line-height:1.85;white-space:pre-wrap">${esc(cached.text)}</div>
-      <div class="card-sub" style="margin-top:10px">생성 시각: ${esc(new Date(cached.at).toLocaleString('ko-KR'))} · 이 기기에만 저장됨(서버 동기화 안 됨)</div>
+      <div class="row no-print" style="gap:6px;margin:6px 0 12px;flex-wrap:wrap">
+        ${Object.entries(HIST_TYPE_LABEL).filter(([tp])=>m.typeCounts[tp]).map(([tp,label])=>`<span class="badge gray">${HIST_TYPE_ICON[tp]} ${label} ${m.typeCounts[tp]}건</span>`).join('')}
+      </div>
+      <div class="rp-section-box" style="margin-bottom:8px">
+        <div class="rp-section-head">종합 요약</div>
+        <div class="rp-section-body">${esc(d.summary||'')}</div>
+      </div>
+      <div class="grid g2" style="gap:8px;margin-bottom:8px">
+        <div class="rp-section-box"><div class="rp-section-head">주요 성과 및 특이사항</div>
+          <div class="rp-section-body">${bullets(d.highlights)}</div></div>
+        <div class="rp-section-box"><div class="rp-section-head">개선이 필요한 부분</div>
+          <div class="rp-section-body">${bullets(d.improvements)}</div></div>
+      </div>
+      <div class="grid g2" style="gap:8px;margin-bottom:8px">
+        <div class="rp-section-box"><div class="rp-section-head">강사별 주목할 점</div>
+          <div class="rp-section-body">${noteBullets(d.instructorNotes)}</div></div>
+        <div class="rp-section-box"><div class="rp-section-head">과정별 주목할 점</div>
+          <div class="rp-section-body">${noteBullets(d.courseNotes)}</div></div>
+      </div>
+      <div class="rp-section-box" style="margin-bottom:4px">
+        <div class="rp-section-head">다음 분기 제언</div>
+        <div class="rp-section-body">${bullets(d.recommendations)}</div>
+      </div>
+      <div class="rp-page-end no-print">이 기기에만 저장됨(서버 동기화 안 됨)</div>
+    </div>
+    <div class="row no-print" style="gap:6px;margin-top:10px">
+      <button class="btn sm primary" onclick="printHistoryReport()">🖨️ 리포트 인쇄·PDF저장</button>
+      <button class="btn sm ghost" onclick="downloadHistoryReport()">⬇ 텍스트로 다운로드</button>
+      <button class="btn sm ghost" onclick="runHistoryAi()">↻ 다시 생성</button>
+    </div>`;
+  }
+  if(cached&&cached.text&&!cached.data){
+    return `<div class="card card-pad" style="text-align:center">
+      <div class="card-sub" style="margin-bottom:10px">예전 형식(텍스트)으로 생성된 리포트예요. 보기 좋은 보고서 형식으로 다시 만들어드릴게요.</div>
+      <button class="btn primary" onclick="runHistoryAi()">✨ 보고서 형식으로 다시 생성</button>
     </div>`;
   }
   return `<div class="card card-pad" style="text-align:center">
-    <div class="card-sub" style="margin-bottom:10px">위 목록을 바탕으로 AI가 종합 리포트를 만들어드려요 — 요약, 주요 성과, 강사·과정별 주목할 점, 개선 제언까지 한 번에.</div>
+    <div class="card-sub" style="margin-bottom:10px">위 목록을 바탕으로 AI가 결과보고서 같은 형식의 종합 리포트를 만들어드려요 — 요약, 주요 성과, 강사·과정별 주목할 점, 개선 제언까지 한 번에.</div>
     <button class="btn primary" onclick="runHistoryAi()">✨ AI로 히스토리 정리하기</button>
   </div>`;
 }
@@ -5626,10 +5674,9 @@ async function runHistoryAi(){
     toast('정리할 히스토리가 없습니다 — 필터를 확인해주세요');
     return;
   }
-  if(box)box.innerHTML='<div class="card card-pad"><div class="card-sub">✨ 생성 중... 잠시만 기다려주세요</div></div>';
-  const T=HIST_YEAR?DB.trainings.filter(t=>t.date.startsWith(HIST_YEAR)):DB.trainings;
-  const totalAvg=avg(T.filter(t=>respOf(t.id).length).map(t=>trainingAvg(t.id)));
-  const dashSummary=`총 교육 수: ${T.length}건, 평균 만족도: ${totalAvg?f1(totalAvg)+'점':'-'} (5점 만점), 총 응답자: ${DB.responses.filter(r=>T.find(t=>t.id===r.trainingId)).length}명`;
+  if(box)box.innerHTML='<div class="card card-pad"><div class="card-sub">✨ 보고서 생성 중... 잠시만 기다려주세요</div></div>';
+  const meta=historyMeta();
+  const dashSummary=`총 교육 수: ${meta.trainingCount}건, 평균 만족도: ${meta.avgScore?f1(meta.avgScore)+'점':'-'} (5점 만점), 총 응답자: ${meta.respCount}명`;
   const entryText=entries.slice(0,150).map(e=>`- [${e.date||'-'}][${HIST_TYPE_LABEL[e.type]||e.type}] ${e.title}${e.detail?' — '+e.detail:''}`).join('\n');
   const prompt=`당신은 GS더프레시 사업기획팀의 교육 담당자를 돕는 보고서 작성 도우미입니다.
 아래는 ${HIST_YEAR?HIST_YEAR+'년':'전체 기간'} GS더프레시 교육 관련 히스토리 데이터입니다 (대시보드 요약 + 교육/결과보고서/강사피드백/테스트/연간일정 이력).
@@ -5640,14 +5687,16 @@ ${dashSummary}
 [히스토리 목록 (최신순, 최대 150건)]
 ${entryText}
 
-위 데이터를 바탕으로 임원 보고에 바로 쓸 수 있는 종합 히스토리 리포트를 작성해주세요. 다음 항목을 포함해주세요:
-1. 전체 요약 (3~4문장)
-2. 주요 성과 및 특이사항
-3. 강사별·과정별 주목할 점
-4. 향후 개선이 필요한 부분
-5. 다음 분기 제언
-
-숫자나 사실은 절대 새로 만들어내지 말고 위에 주어진 데이터만 근거로 사용하세요. 마크다운 기호(#, * 등) 없이 읽기 좋은 일반 텍스트로, 소제목은 "1. 전체 요약"처럼 번호를 붙여 작성해주세요.`;
+위 데이터를 바탕으로 임원 보고에 바로 쓸 수 있는 결과보고서 형식의 히스토리 리포트를 아래 JSON 형식으로만 반환해주세요 (다른 텍스트 없이 JSON만):
+{
+  "summary": "교육 전반에 대한 종합 요약 3~4문장",
+  "highlights": ["주요 성과·특이사항 1", "주요 성과·특이사항 2", "..."],
+  "improvements": ["개선이 필요한 부분 1", "개선이 필요한 부분 2"],
+  "instructorNotes": [{"name":"강사명","note":"그 강사에 대해 주목할 점 한 문장"}],
+  "courseNotes": [{"name":"과정명","note":"그 과정에 대해 주목할 점 한 문장"}],
+  "recommendations": ["다음 분기 제언 1", "다음 분기 제언 2"]
+}
+숫자나 사실은 절대 새로 만들어내지 말고 위에 주어진 데이터만 근거로 사용하세요. 데이터에 강사/과정 이름이 명확히 나오지 않으면 instructorNotes·courseNotes는 빈 배열로 두세요.`;
   let debugMsg='';
   try{
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
@@ -5656,8 +5705,10 @@ ${entryText}
     if(!res.ok){console.error('Gemini API 오류 응답:',res.status,data);debugMsg=`HTTP ${res.status} — ${data?.error?.message||'알 수 없는 오류'}`;throw new Error(debugMsg);}
     const text=(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
     if(!text){debugMsg='응답이 비어있음';throw new Error(debugMsg);}
+    const clean=text.replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(clean);
     DB.historyAI=DB.historyAI||{};
-    DB.historyAI[histKey()]={text,at:new Date().toISOString()};
+    DB.historyAI[histKey()]={data:parsed,meta,at:new Date().toISOString()};
     save();
     const box2=document.getElementById('histAiBox');
     if(box2)box2.innerHTML=renderHistoryAiSection();
@@ -5670,11 +5721,55 @@ ${entryText}
       <button class="btn sm primary" onclick="runHistoryAi()">↻ 다시 시도</button></div>`;
   }
 }
+async function printHistoryReport(){
+  const doc=document.getElementById('historyReportA4');
+  if(!doc){toast('먼저 AI 리포트를 생성해주세요');return;}
+  const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
+    .flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join('\n');
+  const cloned=doc.cloneNode(true);
+  cloned.querySelectorAll('.no-print').forEach(el=>el.remove());
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>GS더프레시 교육 히스토리 리포트 — ${esc(histKey())}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Malgun Gothic',sans-serif;background:#fff;padding:20px}
+    .report-wrap{max-width:800px;margin:0 auto}
+    .dl-bar{background:#0e5a34;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:14px}
+    .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700}
+    .no-print{display:none!important}
+    @media print{.dl-bar{display:none!important}body{padding:0}.report-wrap{max-width:100%}}
+    ${allStyles}
+  </style>
+  </head><body>
+  <div class="dl-bar"><span>📊 교육 히스토리 리포트 — ${esc(histKey())}</span>
+    <button onclick="window.print()">🖨️ PDF로 저장</button></div>
+  <div class="report-wrap">${cloned.outerHTML}</div>
+  </body></html>`);
+  w.document.close();
+  toast('✅ 새창에서 PDF로 저장하세요!');
+}
 function downloadHistoryReport(){
   const cached=(DB.historyAI||{})[histKey()];
-  if(!cached){toast('먼저 AI 리포트를 생성해주세요');return;}
-  dlText(`GS더프레시 교육 히스토리 리포트 (${histKey()})\n생성 시각: ${new Date(cached.at).toLocaleString('ko-KR')}\n\n${cached.text}`,
-    `히스토리리포트_${histKey()}.txt`);
+  if(!cached||!cached.data){toast('먼저 AI 리포트를 생성해주세요');return;}
+  const d=cached.data,m=cached.meta||historyMeta();
+  const sec=(title,arr)=>`${title}\n${(arr&&arr.length)?arr.map(x=>'- '+x).join('\n'):'(해당 사항 없음)'}\n`;
+  const secNote=(title,arr)=>`${title}\n${(arr&&arr.length)?arr.map(x=>`- ${x.name||''}: ${x.note||''}`).join('\n'):'(해당 사항 없음)'}\n`;
+  const text=[
+    `GS더프레시 교육 히스토리 리포트 (${histKey()})`,
+    `생성 시각: ${new Date(cached.at).toLocaleString('ko-KR')}`,
+    `총 교육 수 ${m.trainingCount}건 · 평균 만족도 ${m.avgScore?f1(m.avgScore)+'점':'-'} · 총 응답자 ${m.respCount}명 · 히스토리 항목 ${m.entryCount}건`,
+    '',
+    '[종합 요약]',
+    d.summary||'',
+    '',
+    sec('[주요 성과 및 특이사항]',d.highlights),
+    sec('[개선이 필요한 부분]',d.improvements),
+    secNote('[강사별 주목할 점]',d.instructorNotes),
+    secNote('[과정별 주목할 점]',d.courseNotes),
+    sec('[다음 분기 제언]',d.recommendations)
+  ].join('\n');
+  dlText(text,`히스토리리포트_${histKey()}.txt`);
 }
 function downloadHistoryRaw(){
   const entries=buildHistoryEntries(HIST_YEAR).filter(x=>HIST_TYPES.includes(x.type));
