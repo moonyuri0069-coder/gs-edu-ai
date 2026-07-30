@@ -2302,7 +2302,7 @@ let RPQ='';
 function isValidOpinion(v){
   if(!v||v.trim().length<=2)return false;
   if(/^[ㄱ-ㅎㅏ-ㅣ\s!?~\.]+$/.test(v.trim()))return false;
-  if(/^(.){2,}$/.test(v.trim()))return false;
+  if(/^(.)\1{2,}$/.test(v.trim()))return false;
   return true;
 }
 
@@ -5682,6 +5682,7 @@ function renderHistoryAiSection(){
     <div class="row no-print" style="gap:6px;margin-top:10px">
       <button class="btn sm primary" onclick="printHistoryReport()">🖨️ 리포트 인쇄·PDF저장</button>
       <button class="btn sm ghost" onclick="downloadHistoryReport()">⬇ 텍스트로 다운로드</button>
+      <button class="btn sm ghost" onclick="showHistoryReportPrompt()">📋 보고서 프롬프트 만들기</button>
       <button class="btn sm ghost" onclick="runHistoryAi()">↻ 다시 생성</button>
     </div>`;
   }
@@ -5807,6 +5808,58 @@ function downloadHistoryRaw(){
   if(!entries.length){toast('다운로드할 히스토리가 없습니다');return;}
   const text=entries.map(e=>`[${e.date||'-'}][${HIST_TYPE_LABEL[e.type]||e.type}] ${e.title}${e.detail?' — '+e.detail:''}`).join('\n');
   dlText(text,`히스토리목록_${histKey()}.txt`);
+}
+// 이미 생성된 히스토리 AI 리포트(요약/성과/개선점 등)를 근거로,
+// 챗GPT·클로드 같은 외부 AI 도구에 붙여넣어 정식 보고서 문서(워드/피피티 등)로 완성할 수 있는 "복사용 프롬프트" 텍스트를 만든다.
+function buildHistoryReportPromptText(){
+  const cached=(DB.historyAI||{})[histKey()];
+  if(!cached||!cached.data)return '';
+  const d=cached.data,m=cached.meta||historyMeta();
+  const sec=(title,arr)=>`${title}\n${(arr&&arr.length)?arr.map(x=>'- '+x).join('\n'):'(해당 사항 없음)'}`;
+  const secNote=(title,arr)=>`${title}\n${(arr&&arr.length)?arr.map(x=>`- ${x.name||''}: ${x.note||''}`).join('\n'):'(해당 사항 없음)'}`;
+  return [
+    `당신은 기업 보고서 작성을 도와주는 전문 어시스턴트입니다. 아래는 GS더프레시 사업기획팀이 자체 대시보드에서 뽑아낸 "${histKey()}" 기간 교육 히스토리 분석 결과입니다. 이 데이터를 바탕으로, 임원 보고용으로 바로 쓸 수 있는 정식 보고서 문서를 작성해주세요 (표지, 목차, 섹션 구분이 있는 형식으로).`,
+    '',
+    `[집계 기간] ${histKey()}`,
+    `[핵심 지표] 총 교육 수 ${m.trainingCount}건 · 평균 만족도 ${m.avgScore?f1(m.avgScore)+'점':'-'} (5점 만점) · 총 응답자 ${m.respCount}명 · 히스토리 항목 ${m.entryCount}건`,
+    '',
+    '[종합 요약]',
+    d.summary||'',
+    '',
+    sec('[주요 성과 및 특이사항]',d.highlights),
+    '',
+    sec('[개선이 필요한 부분]',d.improvements),
+    '',
+    secNote('[강사별 주목할 점]',d.instructorNotes),
+    '',
+    secNote('[과정별 주목할 점]',d.courseNotes),
+    '',
+    sec('[다음 분기 제언]',d.recommendations),
+    '',
+    '요청사항: 위 수치와 사실만 근거로 사용하고 새로운 숫자나 사실을 지어내지 마세요. 보고서는 "종합 요약 → 핵심 지표 → 주요 성과 → 개선점 → 강사/과정별 코멘트 → 다음 분기 제언" 순서로 정리하고, 읽기 좋게 소제목과 문단(또는 표)으로 구성해주세요.'
+  ].join('\n');
+}
+function showHistoryReportPrompt(){
+  const text=buildHistoryReportPromptText();
+  if(!text){toast('먼저 AI 리포트를 생성해주세요');return;}
+  const escId='histPromptTa';
+  openModal('📋 보고서용 AI 프롬프트',
+    `<div class="card-sub" style="margin-bottom:8px">아래 내용을 복사해서 챗GPT·클로드 같은 AI 채팅창에 붙여넣으면, 이 히스토리 리포트를 정식 보고서 문서로 다듬어줍니다.</div>
+     <textarea id="${escId}" readonly style="width:100%;height:320px;font-size:.78rem;line-height:1.6;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;resize:vertical">${esc(text)}</textarea>`,
+    `<button class="btn ghost" onclick="closeModal()">닫기</button>
+     <button class="btn primary" onclick="copyHistoryReportPrompt()">📋 복사하기</button>`);
+}
+function copyHistoryReportPrompt(){
+  const ta=document.getElementById('histPromptTa');
+  const text=ta?ta.value:buildHistoryReportPromptText();
+  if(!text)return;
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(text).then(()=>toast('✅ 프롬프트가 복사됐어요! AI 채팅창에 붙여넣어 보세요')).catch(()=>{
+      if(ta){ta.select();document.execCommand('copy');toast('✅ 복사됐어요');}
+    });
+  }else if(ta){
+    ta.select();document.execCommand('copy');toast('✅ 복사됐어요');
+  }
 }
 
 function vSettings(){
