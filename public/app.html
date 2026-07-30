@@ -4961,11 +4961,15 @@ async function syncTestRecords(){
     const delSet=new Set(DB.deletedTestRecordIds||[]);
     rows.forEach(row=>{
       if(delSet.has(row.id))return;
-      if(DB.testRecords.find(x=>x.id===row.id))return;
-      DB.testRecords.push({id:row.id,role:row.role,testName:row.test_name,person:row.person,empNo:row.emp_no||'',
+      const mapped={id:row.id,role:row.role,testName:row.test_name,person:row.person,empNo:row.emp_no||'',
         store:row.store||'',tenure:row.tenure||'',date:row.date||'',score:row.score===null?'':row.score,
         percent:row.percent===null?'':row.percent,passed:!!row.passed,memo:row.memo||'',subjects:row.subjects||[],
-        items:row.items||[],aiReport:row.ai_report||null,aiReportAt:row.ai_report_at||null});
+        items:row.items||[],aiReport:row.ai_report||null,aiReportAt:row.ai_report_at||null};
+      // 다른 사람이 이 기록을 수정(메모, AI 리포트 등)했을 때도 반영되도록 이미 있는 기록도 최신값으로 갱신
+      // (예전엔 이미 로컬에 있는 기록은 건너뛰어서, 다른 사람이 고친 내용이 영원히 안 보이는 문제가 있었음)
+      const existing=DB.testRecords.find(x=>x.id===row.id);
+      if(existing)Object.assign(existing,mapped);
+      else DB.testRecords.push(mapped);
     });
     save();
   }catch(e){console.warn('테스트 이력 동기화 오류:',e);}
