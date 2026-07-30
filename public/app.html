@@ -1750,7 +1750,7 @@ function openQR(id){
    <div class="qrbox"><canvas id="qrC" width="200" height="200"></canvas>
     <div style="min-width:0">
       <div style="font-weight:800">${esc(t.name)} ${t.round}차</div>
-      <div class="card-sub">${t.date} · ${t.type} · 강의 ${(()=>{const ls=t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1);const s=new Set();return ls.filter(L=>{const k=L.instructorId||L.title;if(s.has(k))return false;s.add(k);return true;}).length;})()}개</div>
+      <div class="card-sub">${t.date} · ${t.type} · 강의 ${(()=>{const ls=t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1);const s=new Set();return ls.filter(L=>{const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');if(s.has(k))return false;s.add(k);return true;}).length;})()}개</div>
       <div class="divider"></div>
       <div style="font-size:.8rem;color:var(--ink3);word-break:break-all">${esc(url)}</div>
       <div class="row" style="margin-top:10px">
@@ -2130,7 +2130,7 @@ function vResults(){
      <td><span class="badge gray">${esc(t.type)}</span></td>
      <td class="num">${t.date}</td>
      <td class="num">${t.round}차</td>
-     <td class="num">${(()=>{const ls=t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1);const s=new Set();return ls.filter(L=>{const k=L.instructorId||L.title;if(s.has(k))return false;s.add(k);return true;}).length;})()}개</td>
+     <td class="num">${(()=>{const ls=t.lectures.filter((_,i,arr)=>i>0&&i<arr.length-1);const s=new Set();return ls.filter(L=>{const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');if(s.has(k))return false;s.add(k);return true;}).length;})()}개</td>
      <td class="num">${n}/${t.invited}</td><td class="num">${pct(trainingRate(t))}</td>
      <td><b class="num">${n?f1(trainingAvg(t.id)):'-'}</b></td></tr>`;}).join('')}
   </tbody></table></div>
@@ -2144,7 +2144,7 @@ function vCourseDash(t){
     if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
     if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
     if(L.title&&L.title.includes('가치공유'))return false; // 가치공유 제외
-    const k=L.instructorId||L.instructorName||L.title;
+    const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
     return true;
@@ -2376,7 +2376,7 @@ function vReport(){
     if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
     if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
     if(L.title&&L.title.includes('가치공유'))return false; // 가치공유 제외
-    const k=L.instructorId||L.instructorName||L.title;
+    const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
     return true;
@@ -3261,7 +3261,8 @@ function vFeedback(){
     if(!lectSurveyOn(L))return false;
     return true;
   }):[];
-  // 강사 중복 제거
+  // 강사 중복 제거 (강사피드백은 강의 단위가 아니라 강사 단위로 묶어서 보여주는 화면이라
+  // 한 강사가 여러 강의를 맡아도 여기서는 의도적으로 강사 기준으로만 중복 제거함 — myLects에서 그 강사의 모든 강의를 다시 모아옴)
   const seen=new Set();
   const instrList=fbLects.filter(L=>{
     const k=L.instructorId||L.instructorName||L.title;
@@ -3337,6 +3338,9 @@ function vFeedback(){
     if(!fb.imps.length)fb.imps=[...allImps];
     fb._loaded=true;
     save();
+    // 여기서 서버에도 바로 저장해둬야 함 — 로컬에만 save()해두면, 방금 채운 내용이 서버에 반영되기 전에
+    // 30초 주기 동기화가 서버의 예전(빈) 값으로 덮어써버려서 자동으로 채워진 의견이 사라지는 것처럼 보이는 문제가 있었음
+    sbPatch('trainings',FBQ,{feedback:t.feedback});
   }
 
   const goodRows=fb.goods.map((g,gi)=>`
