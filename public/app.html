@@ -756,6 +756,11 @@ function csv(rows,name){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
   URL.revokeObjectURL(a.href);toast(name+' 다운로드 완료');
 }
+function dlText(text,name){
+  const blob=new Blob(['\uFEFF'+text],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  URL.revokeObjectURL(a.href);toast(name+' 다운로드 완료');
+}
 </script>
 <script>
 /* ═══════════ 라우터 & 셸 (v1과 동일 골격) ═══════════ */
@@ -772,6 +777,7 @@ const MENUS=[['dash','Dashboard','M3 13h6V3H3v10zm0 8h6v-6H3v6zm8 0h10V11H11v10z
  ['testlog','테스트 이력관리','M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-7.5 9.5l2 2 4.5-4.5'],
  ['eduplan','연간일정관리','M7 2v2M17 2v2M3.5 8h17M4 4h16a1 1 0 011 1v15a1 1 0 01-1 1H4a1 1 0 01-1-1V5a1 1 0 011-1zm2 8h3v3H6v-3zm0 0'],
  ['links','링크관리','M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z'],
+ ['history','히스토리 관리','M13 3a9 9 0 100 18 9 9 0 000-18zm0 2a7 7 0 110 14 7 7 0 010-14zm-1 2v5.6l4.2 2.5 1-1.6-3.4-2V7h-1.8zM3 11h2v2H3zm.6-4.2l1.4 1.4-1.4 1.4-1.4-1.4zM7.4 4.2L8.8 5.6 7.4 7 6 5.6z'],
  ['settings','설정','M19.4 13a7.7 7.7 0 000-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 00-1.7-1l-.4-2.6h-4l-.4 2.6a7.7 7.7 0 00-1.7 1l-2.4-1-2 3.4L6.6 11a7.7 7.7 0 000 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 001.7 1l.4 2.6h4l.4-2.6a7.7 7.7 0 001.7-1l2.4 1 2-3.4-2.2-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z']];
 const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간'],trainings:['교육관리','교육·강의 구성 · QR/설문 URL · 응답 마감'],
  instructors:['강사관리','강사 등록 · 강사별 Dashboard'],surveys:['설문관리','설문 구성 미리보기'],
@@ -783,6 +789,7 @@ const PAGE_META={dash:['Dashboard','전사 교육 만족도 현황 — 실시간
  testlog:['테스트 이력관리','직책별 테스트 합격 여부 · 점수 관리'],
  eduplan:['연간일정관리','연도별 교육 운영 캘린더 — 월별 교육 일정 관리'],
  links:['링크관리','자주 쓰는 공유 링크를 탭별로 정리'],
+ history:['히스토리 관리','교육·결과보고서·강사피드백·테스트 이력을 한곳에 모아 AI로 정리'],
  settings:['설정','테마 · 데이터 관리']};
 let session=sessionStorage.getItem('gs_edu_login')==='1';
 // 화면을 열 때마다 Supabase와 동기화 — 이전에는 로컬에 교육 데이터가 하나도 없을 때만 동기화했는데,
@@ -878,7 +885,7 @@ function render(){
   const parts=h.replace('#/','').split('/');
   const page=parts[0]||'dash';
   const body={dash:vDash,trainings:vTrainings,instructors:parts[1]?()=>vInstructorDetail(parts[1]):vInstructors,
-    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,testlog:vTestLog,eduplan:vEduPlan,links:vLinks,settings:vSettings}[page]||vDash;
+    surveys:vSurveys,results:vResults,ai:vAI,agenda:vAgenda,report:vReport,guide:vGuide,feedback:vFeedback,testlog:vTestLog,eduplan:vEduPlan,links:vLinks,history:vHistory,settings:vSettings}[page]||vDash;
   const [title,sub]=PAGE_META[page]||PAGE_META.dash;
   $('#app').innerHTML=`
   <div class="layout">
@@ -1025,7 +1032,11 @@ async function syncFromSupabase(){
           // (없으면 이 브라우저에 이미 있던 값을 유지 — 서버에 아직 없는 옛 데이터를 지우지 않기 위함)
           connectingDayImg:t.connecting_day_img||(existing?existing.connectingDayImg:'')||'',
           photos:(t.photos&&t.photos.length?t.photos:null)||(existing?existing.photos:null)||[],
-          surveyExtra:t.survey_extra||(existing?existing.surveyExtra:null)||[]};
+          surveyExtra:t.survey_extra||(existing?existing.surveyExtra:null)||[],
+          // 강사피드백도 다른 사람이 작성한 게 보이도록 서버 값을 받아옴 (없으면 로컬 값 유지)
+          feedback:(t.feedback&&Object.keys(t.feedback).length?t.feedback:null)||(existing?existing.feedback:null)||{},
+          // 결과보고서 "기타 보고 사항"도 다른 사람이 쓴 내용이 보이도록 서버 값을 받아옴
+          reportEtc:t.report_etc||(existing?existing.reportEtc:'')||''};
         if(existing){Object.assign(existing,mapped);}
         else{DB.trainings.push(mapped);}
       });
@@ -2528,7 +2539,7 @@ function vReport(){
     <div contenteditable="${session?'true':'false'}"
       id="rpEtc"
       style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.78rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
-      onblur="const tr=byId(DB.trainings,RPQ);if(tr){tr.reportEtc=this.innerText.trim();save();sbPatch('trainings',RPQ,{agenda_head:tr.agendaHead,subtitle:tr.subtitle||''});}">
+      onblur="const tr=byId(DB.trainings,RPQ);if(tr){tr.reportEtc=this.innerText.trim();save();sbPatch('trainings',RPQ,{report_etc:tr.reportEtc});}">
       ${esc(t.reportEtc||'')}
     </div>
   </div>
@@ -3428,7 +3439,8 @@ function saveFeedback(tid,instr){
   const t=byId(DB.trainings,tid);
   if(!t)return;
   save();
-  sbPatch('trainings',tid,{attendees:t.attendees||[]});
+  // 다른 사람 화면에도 보이도록 서버에 저장 — 예전엔 여기서 엉뚱하게 attendees를 보내서 피드백이 서버에 저장되지 않았음
+  sbPatch('trainings',tid,{feedback:t.feedback||{}});
   toast('✅ 피드백이 저장됐어요!');
 }
 
@@ -5476,6 +5488,199 @@ function vEduPlan(){
   </div>`;
 
   return tabBar+header+table;
+}
+
+/* ═══════════ 히스토리 관리 ═══════════ */
+// 교육/결과보고서/강사피드백/테스트이력/연간일정관리에 흩어져 있는 기록을 한곳에 모아 보여주고,
+// AI(Gemini)로 종합 리포트를 만들어 다운로드할 수 있게 해주는 화면
+const HIST_TYPE_LABEL={training:'교육',report:'결과보고서',feedback:'강사피드백',test:'테스트',plan:'연간일정'};
+const HIST_TYPE_ICON={training:'📚',report:'📄',feedback:'💬',test:'📝',plan:'🗓'};
+let HIST_YEAR='';
+let HIST_TYPES=['training','report','feedback','test','plan'];
+function buildHistoryEntries(year){
+  const items=[];
+  const T=year?DB.trainings.filter(t=>t.date&&t.date.startsWith(year)):DB.trainings;
+  T.forEach(t=>{
+    const n=respOf(t.id).length;
+    const av=n?trainingAvg(t.id):null;
+    items.push({type:'training',date:t.date,title:`${t.name} ${t.round}차`,
+      detail:`${t.place?t.place+' · ':''}대상 ${t.invited||0}명 · 응답 ${n}건${av?' · 평균만족도 '+f1(av)+'점':''} · ${t.status==='open'?'진행중':'마감'}`});
+    const rtext=(t.reportEtc||'').trim();
+    if(rtext)items.push({type:'report',date:t.date,title:`${t.name} ${t.round}차 결과보고서`,detail:rtext.slice(0,300)});
+    if(t.feedback){
+      Object.entries(t.feedback).forEach(([iid,fb])=>{
+        if(!fb)return;
+        const ins=byId(DB.instructors,iid);
+        const name=ins?ins.name:iid;
+        const goods=(fb.goods||[]).filter(Boolean),imps=(fb.imps||[]).filter(Boolean);
+        if(!goods.length&&!imps.length)return;
+        items.push({type:'feedback',date:t.date,title:`${t.name} ${t.round}차 — ${name} 강사 피드백`,
+          detail:`${goods.length?'👍 '+goods.join(' / '):''}${goods.length&&imps.length?'  ':''}${imps.length?'👎 '+imps.join(' / '):''}`});
+      });
+    }
+  });
+  const testGroups={};
+  (DB.testRecords||[]).forEach(r=>{
+    if(year&&!(r.date||'').startsWith(year))return;
+    const k=r.role+'||'+r.testName;
+    (testGroups[k]=testGroups[k]||[]).push(r);
+  });
+  Object.entries(testGroups).forEach(([k,rows])=>{
+    const[role,testName]=k.split('||');
+    const dates=rows.map(r=>r.date).filter(Boolean).sort();
+    const scores=rows.map(r=>+r.score).filter(v=>!isNaN(v));
+    const avgScore=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:null;
+    const passN=rows.filter(r=>r.passed).length;
+    items.push({type:'test',date:dates[dates.length-1]||'',title:`${testName} (${role})`,
+      detail:`응시 ${rows.length}명 · 평균 ${avgScore!=null?f1(avgScore):'-'}점 · 합격 ${passN}/${rows.length}명`});
+  });
+  (DB.eduPlans||[]).forEach(plan=>{
+    if(year&&String(plan.year)!==year)return;
+    (plan.groups||[]).forEach(g=>{
+      (g.rows||[]).forEach(r=>{
+        Object.entries(r.cells||{}).forEach(([month,c])=>{
+          const cell=typeof c==='string'?{text:c}:(c||{});
+          if(!cell.text)return;
+          items.push({type:'plan',date:`${plan.year}-${String(month).padStart(2,'0')}`,
+            title:`${g.name||''} · ${r.label||''} — ${cell.text}`,
+            detail:`${cell.place?cell.place+' ':''}${cell.date?cell.date:''}${cell.done?' · 완료':''}`.trim()});
+        });
+      });
+    });
+  });
+  items.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  return items;
+}
+function toggleHistType(type){
+  const i=HIST_TYPES.indexOf(type);
+  if(i>=0)HIST_TYPES.splice(i,1);else HIST_TYPES.push(type);
+  render();
+}
+function histKey(){return HIST_YEAR||'전체기간';}
+function vHistory(){
+  const years=[...new Set(DB.trainings.map(t=>t.date.slice(0,4)))].sort().reverse();
+  const entries=buildHistoryEntries(HIST_YEAR).filter(x=>HIST_TYPES.includes(x.type));
+  const filters=`<div class="card card-pad" style="margin-bottom:14px">
+    <div class="row" style="gap:14px;flex-wrap:wrap;align-items:center">
+      <div class="row" style="gap:8px;align-items:center">
+        <b style="font-size:.9rem">기간</b>
+        <select class="select" style="width:120px" onchange="HIST_YEAR=this.value;render()">
+          <option value="">전체 기간</option>
+          ${years.map(y=>`<option value="${y}" ${HIST_YEAR===y?'selected':''}>${y}년</option>`).join('')}
+        </select>
+      </div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        ${Object.keys(HIST_TYPE_LABEL).map(tp=>`<span class="chip ${HIST_TYPES.includes(tp)?'on':''}" onclick="toggleHistType('${tp}')">${HIST_TYPE_ICON[tp]} ${HIST_TYPE_LABEL[tp]}</span>`).join('')}
+      </div>
+      <span class="card-sub" style="margin-left:auto">총 ${entries.length}건</span>
+    </div>
+  </div>`;
+
+  const aiSection=`<div id="histAiBox">${renderHistoryAiSection()}</div>`;
+
+  const list=entries.length?`<div class="card" style="padding:6px 0">
+    ${entries.map(e=>`<div class="row" style="gap:12px;align-items:flex-start;padding:12px 20px;border-bottom:1px solid var(--border)">
+      <span style="font-size:1.1rem;line-height:1.4">${HIST_TYPE_ICON[e.type]||'•'}</span>
+      <div style="flex:1;min-width:0">
+        <div class="row" style="gap:8px;align-items:baseline;flex-wrap:wrap">
+          <b style="font-size:.86rem">${esc(e.title)}</b>
+          <span class="badge gray" style="font-size:.66rem">${HIST_TYPE_LABEL[e.type]}</span>
+          <span class="card-sub" style="font-size:.72rem">${esc(e.date||'-')}</span>
+        </div>
+        ${e.detail?`<div class="card-sub" style="margin-top:3px;font-size:.78rem;line-height:1.6">${esc(e.detail)}</div>`:''}
+      </div>
+    </div>`).join('')}
+  </div>`:`<div class="empty">조건에 맞는 히스토리가 없습니다</div>`;
+
+  return `<div class="card-sub" style="margin-bottom:14px">교육·결과보고서·강사피드백·테스트·연간일정에 쌓인 기록을 한곳에 모아 보여줘요. AI로 정리해서 리포트로 다운로드할 수 있어요.</div>
+    ${filters}
+    ${aiSection}
+    <div style="margin:18px 0 8px" class="spread"><div class="card-title">📋 히스토리 목록</div>
+      <button class="btn sm ghost" onclick="downloadHistoryRaw()">⬇ 목록 다운로드(txt)</button></div>
+    ${list}`;
+}
+function renderHistoryAiSection(){
+  const cached=(DB.historyAI||{})[histKey()];
+  if(cached){
+    return `<div class="card" style="padding:16px;background:var(--bg2,rgba(127,127,127,.06))">
+      <div class="spread" style="margin-bottom:8px;gap:8px;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">✨ AI 히스토리 리포트 — ${esc(histKey())}</div>
+        <div class="row" style="gap:6px">
+          <button class="btn sm ghost" onclick="downloadHistoryReport()">⬇ 리포트 다운로드</button>
+          <button class="btn sm ghost" onclick="runHistoryAi()">↻ 다시 생성</button>
+        </div>
+      </div>
+      <div style="font-size:.86rem;line-height:1.85;white-space:pre-wrap">${esc(cached.text)}</div>
+      <div class="card-sub" style="margin-top:10px">생성 시각: ${esc(new Date(cached.at).toLocaleString('ko-KR'))} · 이 기기에만 저장됨(서버 동기화 안 됨)</div>
+    </div>`;
+  }
+  return `<div class="card card-pad" style="text-align:center">
+    <div class="card-sub" style="margin-bottom:10px">위 목록을 바탕으로 AI가 종합 리포트를 만들어드려요 — 요약, 주요 성과, 강사·과정별 주목할 점, 개선 제언까지 한 번에.</div>
+    <button class="btn primary" onclick="runHistoryAi()">✨ AI로 히스토리 정리하기</button>
+  </div>`;
+}
+async function runHistoryAi(){
+  const box=document.getElementById('histAiBox');
+  const entries=buildHistoryEntries(HIST_YEAR).filter(x=>HIST_TYPES.includes(x.type));
+  if(!entries.length){
+    toast('정리할 히스토리가 없습니다 — 필터를 확인해주세요');
+    return;
+  }
+  if(box)box.innerHTML='<div class="card card-pad"><div class="card-sub">✨ 생성 중... 잠시만 기다려주세요</div></div>';
+  const T=HIST_YEAR?DB.trainings.filter(t=>t.date.startsWith(HIST_YEAR)):DB.trainings;
+  const totalAvg=avg(T.filter(t=>respOf(t.id).length).map(t=>trainingAvg(t.id)));
+  const dashSummary=`총 교육 수: ${T.length}건, 평균 만족도: ${totalAvg?f1(totalAvg)+'점':'-'} (5점 만점), 총 응답자: ${DB.responses.filter(r=>T.find(t=>t.id===r.trainingId)).length}명`;
+  const entryText=entries.slice(0,150).map(e=>`- [${e.date||'-'}][${HIST_TYPE_LABEL[e.type]||e.type}] ${e.title}${e.detail?' — '+e.detail:''}`).join('\n');
+  const prompt=`당신은 GS더프레시 사업기획팀의 교육 담당자를 돕는 보고서 작성 도우미입니다.
+아래는 ${HIST_YEAR?HIST_YEAR+'년':'전체 기간'} GS더프레시 교육 관련 히스토리 데이터입니다 (대시보드 요약 + 교육/결과보고서/강사피드백/테스트/연간일정 이력).
+
+[대시보드 요약]
+${dashSummary}
+
+[히스토리 목록 (최신순, 최대 150건)]
+${entryText}
+
+위 데이터를 바탕으로 임원 보고에 바로 쓸 수 있는 종합 히스토리 리포트를 작성해주세요. 다음 항목을 포함해주세요:
+1. 전체 요약 (3~4문장)
+2. 주요 성과 및 특이사항
+3. 강사별·과정별 주목할 점
+4. 향후 개선이 필요한 부분
+5. 다음 분기 제언
+
+숫자나 사실은 절대 새로 만들어내지 말고 위에 주어진 데이터만 근거로 사용하세요. 마크다운 기호(#, * 등) 없이 읽기 좋은 일반 텍스트로, 소제목은 "1. 전체 요약"처럼 번호를 붙여 작성해주세요.`;
+  let debugMsg='';
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await res.json();
+    if(!res.ok){console.error('Gemini API 오류 응답:',res.status,data);debugMsg=`HTTP ${res.status} — ${data?.error?.message||'알 수 없는 오류'}`;throw new Error(debugMsg);}
+    const text=(data.candidates?.[0]?.content?.parts?.[0]?.text||'').trim();
+    if(!text){debugMsg='응답이 비어있음';throw new Error(debugMsg);}
+    DB.historyAI=DB.historyAI||{};
+    DB.historyAI[histKey()]={text,at:new Date().toISOString()};
+    save();
+    const box2=document.getElementById('histAiBox');
+    if(box2)box2.innerHTML=renderHistoryAiSection();
+  }catch(e){
+    console.error('히스토리 AI 오류:',e);
+    const box2=document.getElementById('histAiBox');
+    if(box2)box2.innerHTML=`<div class="card" style="padding:14px;border:1px solid #be185d">
+      <div style="color:#be185d;margin-bottom:8px">⚠ 생성에 실패했습니다. 잠시 후 다시 시도해주세요.</div>
+      ${debugMsg?`<div class="card-sub" style="margin-bottom:8px;font-family:monospace;font-size:.72rem">${esc(debugMsg)}</div>`:''}
+      <button class="btn sm primary" onclick="runHistoryAi()">↻ 다시 시도</button></div>`;
+  }
+}
+function downloadHistoryReport(){
+  const cached=(DB.historyAI||{})[histKey()];
+  if(!cached){toast('먼저 AI 리포트를 생성해주세요');return;}
+  dlText(`GS더프레시 교육 히스토리 리포트 (${histKey()})\n생성 시각: ${new Date(cached.at).toLocaleString('ko-KR')}\n\n${cached.text}`,
+    `히스토리리포트_${histKey()}.txt`);
+}
+function downloadHistoryRaw(){
+  const entries=buildHistoryEntries(HIST_YEAR).filter(x=>HIST_TYPES.includes(x.type));
+  if(!entries.length){toast('다운로드할 히스토리가 없습니다');return;}
+  const text=entries.map(e=>`[${e.date||'-'}][${HIST_TYPE_LABEL[e.type]||e.type}] ${e.title}${e.detail?' — '+e.detail:''}`).join('\n');
+  dlText(text,`히스토리목록_${histKey()}.txt`);
 }
 
 function vSettings(){
