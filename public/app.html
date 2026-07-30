@@ -319,16 +319,20 @@ table.ep-table{table-layout:fixed;border-collapse:separate;border-spacing:0;widt
   display:inline-block;border-radius:99px;padding:2px 8px!important;margin-top:4px}
 .ep-row-label{font-weight:700;font-size:.8rem;border:none!important;background:transparent!important;padding:2px 4px!important}
 .ep-row-count{font-size:.68rem;border:none!important;background:transparent!important;padding:2px 4px!important;color:var(--ink3)}
-.ep-cell-card{border-radius:9px;border:1px solid transparent;padding:5px 6px;transition:box-shadow .15s,border-color .15s;min-height:64px}
+.ep-cell-card{border-radius:8px;border:1px solid transparent;padding:3px 4px;transition:box-shadow .15s,border-color .15s;min-height:42px;position:relative}
 .ep-cell-card.has{box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.ep-cell-card.done{opacity:.55}
 .ep-cell-card:hover,.ep-cell-card:focus-within{border-color:var(--green-line);box-shadow:0 2px 8px rgba(0,0,0,.08)}
-.ep-name{width:100%;border:none!important;background:transparent!important;font-weight:700;font-size:.76rem;resize:vertical;
-  padding:2px 2px!important;min-height:34px;line-height:1.35}
-.ep-sub-row{display:flex;gap:4px;margin-top:3px}
-.ep-sub{flex:1;min-width:0;border:none!important;background:rgba(127,127,127,.08)!important;border-radius:6px!important;
-  font-size:.66rem!important;padding:3px 5px!important;color:var(--ink2)}
+.ep-name{width:100%;border:none!important;background:transparent!important;font-weight:700;font-size:.72rem;resize:vertical;
+  padding:1px 16px 1px 1px!important;min-height:22px;line-height:1.25}
+.ep-cell-card.done .ep-name{text-decoration:line-through}
+.ep-sub-row{display:flex;gap:3px;margin-top:1px}
+.ep-sub{flex:1;min-width:0;border:none!important;background:rgba(127,127,127,.08)!important;border-radius:5px!important;
+  font-size:.62rem!important;padding:2px 4px!important;color:var(--ink2)}
 /* 안내 문구(placeholder)는 아주 연하게, 실제로 입력한 내용은 원래대로 진하게 */
 .ep-name::placeholder,.ep-sub::placeholder{color:var(--ink4)!important;font-weight:400!important;opacity:.6}
+/* 완료 체크박스 — 칸 오른쪽 위에 작게 표시, 체크하면 카드가 옅어지고 교육명에 취소선 */
+.ep-done-chk{position:absolute;top:3px;right:3px;width:14px;height:14px;cursor:pointer;accent-color:var(--green);z-index:1}
 .ep-g0{background:#eef4ff}.ep-g0b{border-left:4px solid #93c5fd}
 .ep-g1{background:#eefcf3}.ep-g1b{border-left:4px solid #86efac}
 .ep-g2{background:#fdf4ff}.ep-g2b{border-left:4px solid #d8b4fe}
@@ -5298,9 +5302,9 @@ function deleteEduRow(id,gid,rid){
 // 그 옛 데이터도 그대로 읽을 수 있도록 여기서 통일된 형태로 변환해줌
 function epCellVal(r,m){
   const v=r&&r.cells&&r.cells[m];
-  if(v==null)return{text:'',place:'',date:''};
-  if(typeof v==='string')return{text:v,place:'',date:''};
-  return{text:v.text||'',place:v.place||'',date:v.date||''};
+  if(v==null)return{text:'',place:'',date:'',done:false};
+  if(typeof v==='string')return{text:v,place:'',date:'',done:false};
+  return{text:v.text||'',place:v.place||'',date:v.date||'',done:!!v.done};
 }
 function updateEduCellField(id,gid,rid,month,field,value){
   const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
@@ -5309,10 +5313,22 @@ function updateEduCellField(id,gid,rid,month,field,value){
   r.cells=r.cells||{};
   const cur=epCellVal(r,month);
   cur[field]=value;
-  if(!cur.text&&!cur.place&&!cur.date)delete r.cells[month];
+  if(!cur.text&&!cur.place&&!cur.date&&!cur.done)delete r.cells[month];
   else r.cells[month]=cur;
   save();sbUpsertEduPlan(plan);
   toast('저장되었습니다');
+}
+function toggleEduDone(id,gid,rid,month){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
+  const r=(g.rows||[]).find(x=>x.id===rid);if(!r)return;
+  r.cells=r.cells||{};
+  const cur=epCellVal(r,month);
+  cur.done=!cur.done;
+  if(!cur.text&&!cur.place&&!cur.date&&!cur.done)delete r.cells[month];
+  else r.cells[month]=cur;
+  save();render();
+  sbUpsertEduPlan(plan);
 }
 function sbUpsertEduPlan(plan){
   try{
@@ -5421,7 +5437,8 @@ function vEduPlan(){
       const c=epCellVal(r,m);
       const has=c.text||c.place||c.date;
       return `<td>
-        <div class="ep-cell-card ${has?'has':''}">
+        <div class="ep-cell-card ${has?'has':''} ${c.done?'done':''}">
+          ${has?`<input type="checkbox" class="ep-done-chk" title="완료 표시" ${c.done?'checked':''} onclick="toggleEduDone('${plan.id}','${g.id}','${r.id}','${m}')">`:''}
           <textarea class="input ep-name" rows="2" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','text',this.value)">${esc(c.text)}</textarea>
           <div class="ep-sub-row">
             <input class="input ep-sub" value="${esc(c.place)}" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','place',this.value)">
