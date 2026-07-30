@@ -1013,6 +1013,10 @@ async function syncFromSupabase(){
           place:t.place,invited:t.invited,status:t.status,subtitle:t.subtitle||'',
           agendaHead:t.agenda_head||'',lectures:t.lectures||[],
           attendees:t.attendees||[],budget:t.budget||[],checkins:t.checkins||[],
+          // 커넥팅데이 이미지·결과보고서 사진은 다른 사람이 올린 것도 이 화면에 그대로 보이도록 서버 값을 받아옴
+          // (없으면 이 브라우저에 이미 있던 값을 유지 — 서버에 아직 없는 옛 데이터를 지우지 않기 위함)
+          connectingDayImg:t.connecting_day_img||(existing?existing.connectingDayImg:'')||'',
+          photos:(t.photos&&t.photos.length?t.photos:null)||(existing?existing.photos:null)||[],
           surveyExtra:t.survey_extra||(existing?existing.surveyExtra:null)||[]};
         if(existing){Object.assign(existing,mapped);}
         else{DB.trainings.push(mapped);}
@@ -2817,7 +2821,7 @@ async function pasteConnectingImg(tid){
             const compressed=canvas.toDataURL('image/jpeg',0.85);
             t.connectingDayImg=compressed;
             save();
-            sbPatch('trainings',tid,{checkins:t.checkins||[]});
+            sbPatch('trainings',tid,{connecting_day_img:t.connectingDayImg}); // 다른 사람 화면에도 보이도록 서버에 저장 — 예전엔 여기서 엉뚱하게 checkins를 보내서 이미지가 서버에 저장되지 않았음
             render();
             toast('✅ 이미지 붙여넣기 완료!');
           };
@@ -2838,7 +2842,7 @@ function removeConnectingImg(tid){
   if(!t)return;
   delete t.connectingDayImg;
   save();
-  sbPatch('trainings',tid,{checkins:t.checkins||[]});
+  sbPatch('trainings',tid,{connecting_day_img:null});
   render();
   toast('이미지가 삭제됐어요');
 }
