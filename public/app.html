@@ -63,6 +63,7 @@ input,select,textarea{font-family:inherit;font-size:.95rem;color:var(--ink)}
 .page-sub{font-size:.8rem;color:var(--ink3)}
 .top-right{margin-left:auto;display:flex;gap:8px;align-items:center}
 .content{padding:24px 26px 60px;max-width:1240px;width:100%;margin:0 auto}
+.content-wide{max-width:none}
 
 /* ═══════════ 공통 컴포넌트 ═══════════ */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
@@ -895,7 +896,7 @@ function render(){
         <button class="btn sm" onclick="toggleTheme()">${DB.theme==='dark'?'라이트':'다크'} 모드</button>
       </div>
       </div>
-      <div class="content" id="content">${body()}</div>
+      <div class="content ${page==='eduplan'?'content-wide':''}" id="content">${body()}</div>
     </div>
   </div>`;
 
