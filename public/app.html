@@ -2879,7 +2879,7 @@ function openSlideFullscreen(){
     <button onclick="go(-1)">◀ 이전</button>
     <span id="nn">1 / 4</span>
     <button onclick="go(1)">다음 ▶</button>
-    <span style="opacity:.5;margin-left:12px">화살표키 · 클릭으로 넘기기</span>
+    <span style="opacity:.5;margin-left:12px">화살표키·Page Up/Down·발표 포인터·클릭으로 넘기기</span>
   </div>
   <script>
   var idx=0,pages=document.querySelectorAll('.sp');
@@ -2905,10 +2905,12 @@ function openSlideFullscreen(){
     });
   }
   document.addEventListener('keydown',function(e){
-    if(e.key==='ArrowRight'||e.key===' ')go(1);
-    else if(e.key==='ArrowLeft')go(-1);
+    // 발표용 포인터(클리커)는 기기에 따라 화살표키뿐 아니라 Page Up/Down, 위/아래 화살표로도 신호를 보내서 그것도 함께 받아줌
+    if(['ArrowRight','ArrowDown','PageDown',' '].includes(e.key))go(1);
+    else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key))go(-1);
     else if(e.key==='Escape')window.close();
   });
+  window.addEventListener('load',function(){window.focus();}); // 포인터 신호가 이 창으로 전달되려면 이 창에 키보드 포커스가 있어야 함
   document.addEventListener('click',function(e){
     if(e.target.closest('button'))return;
     go(e.clientX>window.innerWidth/2?1:-1);
