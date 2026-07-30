@@ -292,16 +292,19 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 
 /* ═══ 연간일정관리 ═══ */
 .ep-tabs .btn{font-weight:700}
-.ep-head{background:linear-gradient(135deg,var(--green-soft),var(--surface));border:1px solid var(--green-line)}
-.ep-wrap{overflow:auto;border-radius:var(--r);border:1px solid var(--border);max-height:76vh;background:var(--surface)}
-table.ep-table{border-collapse:separate;border-spacing:0;width:100%;min-width:1620px;font-size:.82rem}
+.ep-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.ep-toolbar .input{padding:6px 10px;font-size:.86rem}
+.ep-wrap{overflow:auto;border-radius:var(--r);border:1px solid var(--border);max-height:86vh;background:var(--surface)}
+table.ep-table{table-layout:fixed;border-collapse:separate;border-spacing:0;width:100%;font-size:.8rem}
 .ep-table th{position:sticky;top:0;z-index:5;background:var(--surface2);color:var(--ink2);
-  font-weight:800;padding:10px 6px;border-bottom:2px solid var(--border);text-align:center;white-space:nowrap}
+  font-weight:800;padding:8px 4px;border-bottom:2px solid var(--border);text-align:center;overflow:hidden}
 .ep-th-corner1{position:sticky;left:0;top:0;z-index:7;background:var(--surface2)}
-.ep-th-corner2{position:sticky;left:132px;top:0;z-index:7;background:var(--surface2)}
-.ep-td-group{position:sticky;left:0;z-index:3;width:132px;min-width:132px;border-right:1px solid var(--border)}
-.ep-td-row{position:sticky;left:132px;z-index:2;width:140px;min-width:140px;border-right:2px solid var(--border)}
-.ep-table td{padding:6px;border-bottom:1px solid var(--border);vertical-align:top}
+.ep-th-corner2{position:sticky;left:96px;top:0;z-index:7;background:var(--surface2)}
+.ep-th-month{position:relative}
+.ep-th-month .ep-th-x{position:absolute;top:2px;right:4px;cursor:pointer;color:var(--ink4);font-size:.68rem;font-weight:400}
+.ep-td-group{position:sticky;left:0;z-index:3;width:96px;min-width:96px;border-right:1px solid var(--border)}
+.ep-td-row{position:sticky;left:96px;z-index:2;width:104px;min-width:104px;border-right:2px solid var(--border)}
+.ep-table td{padding:4px;border-bottom:1px solid var(--border);vertical-align:top;overflow:hidden}
 /* 그 달에 교육이 없는 칸은 대분류 색과 무관하게 항상 흰 바탕 — 채워진 칸만 카드 스타일(.ep-cell-card.has)로 색이 들어옴 */
 .ep-table td:not(.ep-td-group):not(.ep-td-row){background:var(--surface)}
 /* 공휴일 = 달력 상단의 작은 이벤트 배지로 표시(입력 없으면 안 보이다가, 입력하면 알약 모양 배지로 나타남) */
@@ -5238,6 +5241,14 @@ function updateEduHoliday(id,month,value){
   if(value)plan.holidays[month]=value;else delete plan.holidays[month];
   save();sbUpsertEduPlan(plan);
 }
+function toggleEduMonth(id,month){
+  // 숨긴 달은 화면을 넓게 쓰기 위한 "내 화면 설정"이라 이 브라우저에만 저장하고 서버에는 동기화하지 않음
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  plan.hiddenMonths=plan.hiddenMonths||[];
+  const idx=plan.hiddenMonths.indexOf(month);
+  if(idx>=0)plan.hiddenMonths.splice(idx,1);else plan.hiddenMonths.push(month);
+  save();render();
+}
 function addEduGroup(id){
   const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
   const name=(prompt('새 대분류(구분) 이름을 입력해주세요 (예: 직영)')||'').trim();
@@ -5357,17 +5368,11 @@ function vEduPlan(){
     <button class="btn sm" onclick="addEduYear()">＋ 연도 추가</button>
   </div>`;
 
-  const header=`<div class="card ep-head" style="margin-bottom:14px"><div class="card-pad">
-    <div class="grid g2">
-      <div class="fld-group"><label class="fld">제목</label>
-        <input class="input" style="font-weight:700" value="${esc(plan.title||'')}" onchange="updateEduTitle('${plan.id}',this.value)"></div>
-      <div class="fld-group"><label class="fld">연도</label>
-        <input class="input num" type="number" value="${plan.year}" onchange="updateEduYear('${plan.id}',this.value)"></div>
-    </div>
-    <div class="row" style="margin-top:10px;gap:8px">
-      <button class="btn sm ghost" style="color:#be185d" onclick="deleteEduYear('${plan.id}')">🗑 ${plan.year}년 일정 전체 삭제</button>
-    </div>
-  </div></div>`;
+  const header=`<div class="ep-toolbar">
+    <input class="input" style="max-width:260px;font-weight:700" value="${esc(plan.title||'')}" onchange="updateEduTitle('${plan.id}',this.value)">
+    <input class="input num" style="max-width:90px" type="number" value="${plan.year}" onchange="updateEduYear('${plan.id}',this.value)">
+    <button class="btn sm ghost" style="color:#be185d;margin-left:auto" onclick="deleteEduYear('${plan.id}')">🗑 ${plan.year}년 일정 전체 삭제</button>
+  </div>`;
 
   const groups=plan.groups||[];
   const flat=[];
@@ -5376,8 +5381,18 @@ function vEduPlan(){
     rows.forEach((r,ri)=>flat.push({g,r,gi,isFirst:ri===0,span:rows.length}));
   });
 
+  const hiddenMonths=plan.hiddenMonths||[];
+  const visMonths=EP_MONTHS.filter(m=>!hiddenMonths.includes(m));
+  const hiddenBar=hiddenMonths.length?`<div class="card-sub" style="margin:0 22px 10px">숨긴 달 — 클릭하면 다시 보여요:
+    ${hiddenMonths.slice().sort((a,b)=>+a-+b).map(m=>`<span class="badge gray" style="margin-left:4px;cursor:pointer" onclick="toggleEduMonth('${plan.id}','${m}')">↺ ${m}월</span>`).join('')}
+  </div>`:'';
+  // 표가 화면 폭에 딱 맞게 12개월이 한 번에 들어오도록 고정 열(구분/세부항목/관리)만 px로 잡고 나머지는 남는 폭을 달 수만큼 균등 분배
+  const colgroup=`<colgroup><col style="width:96px"><col style="width:104px">
+    ${visMonths.map(()=>`<col style="width:calc((100% - 234px)/${visMonths.length})">`).join('')}
+    <col style="width:34px"></colgroup>`;
   // 공휴일은 별도 행이 아니라 달 제목 아래 작은 이벤트 배지로 표시 — 입력하면 알약 모양으로 나타남
-  const monthHeadCells=EP_MONTHS.map(m=>`<th>${m}월
+  const monthHeadCells=visMonths.map(m=>`<th class="ep-th-month">${m}월
+    <span class="ep-th-x" title="이 달 열 숨기기" onclick="toggleEduMonth('${plan.id}','${m}')">✕</span>
     <input class="input ep-event-badge" placeholder="+이벤트" value="${esc((plan.holidays||{})[m]||'')}" onchange="updateEduHoliday('${plan.id}','${m}',this.value)">
   </th>`).join('');
 
@@ -5401,7 +5416,7 @@ function vEduPlan(){
         <span style="cursor:pointer;color:var(--ink4);font-size:.85rem;padding:2px" title="이 행(세부 항목) 삭제" onclick="deleteEduRow('${plan.id}','${g.id}','${r.id}')">🗑</span>
       </div>
     </td>
-    ${EP_MONTHS.map(m=>{
+    ${visMonths.map(m=>{
       const c=epCellVal(r,m);
       const has=c.text||c.place||c.date;
       return `<td>
@@ -5427,11 +5442,13 @@ function vEduPlan(){
         <button class="btn sm primary" onclick="addEduGroup('${plan.id}')">＋ 대분류(구분) 추가</button></div>
     </div>
     ${legend}
-    <div class="card-sub" style="padding:0 22px 10px">칸을 클릭해서 교육명·장소·일자를 바로 입력·수정할 수 있어요. 위/왼쪽을 고정해서 스크롤해도 어느 달·어느 항목인지 한눈에 보여요.</div>
+    ${hiddenBar}
+    <div class="card-sub" style="padding:0 22px 10px">칸을 클릭해서 교육명·장소·일자를 바로 입력·수정할 수 있어요. 위/왼쪽을 고정해서 스크롤해도 어느 달·어느 항목인지 한눈에 보여요. 달 제목의 ✕를 누르면 그 달 열을 숨길 수 있어요.</div>
     <div class="ep-wrap"><table class="ep-table">
-      <thead><tr><th class="ep-th-corner1">구분</th><th class="ep-th-corner2">세부 항목</th>${monthHeadCells}<th style="min-width:44px"></th></tr></thead>
+      ${colgroup}
+      <thead><tr><th class="ep-th-corner1">구분</th><th class="ep-th-corner2">세부 항목</th>${monthHeadCells}<th style="min-width:34px"></th></tr></thead>
       <tbody>
-        ${bodyRows||`<tr><td colspan="${2+EP_MONTHS.length+1}" style="text-align:center;color:var(--ink4);padding:20px">＋ 대분류(구분) 추가로 시작해주세요</td></tr>`}
+        ${bodyRows||`<tr><td colspan="${2+visMonths.length+1}" style="text-align:center;color:var(--ink4);padding:20px">＋ 대분류(구분) 추가로 시작해주세요</td></tr>`}
       </tbody>
     </table></div>
   </div>`;
