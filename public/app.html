@@ -962,13 +962,21 @@ async function sbUpsert(table, data){
 }
 async function sbPatch(table, id, data){
   try{
-    await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/'+table+'?id=eq.'+id,{
+    const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/'+table+'?id=eq.'+id,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM',
         'Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
       body:JSON.stringify(data)
     });
-  }catch(e){console.warn('Supabase 업데이트 오류:',e);}
+    if(!res.ok){
+      // 예전엔 여기서 실패해도 아무 표시가 없어서 "로컬엔 저장됐는데 서버엔 조용히 안 올라가는" 문제를
+      // 전혀 알아챌 수 없었음 — 최소한 콘솔에는 원인(용량 초과, 권한 오류 등)을 남기도록 함
+      const bodyTxt=await res.text().catch(()=>'');
+      console.error(`Supabase 저장 실패 [${table} id=${id}] status=${res.status}`,bodyTxt.slice(0,300));
+      return false;
+    }
+    return true;
+  }catch(e){console.warn('Supabase 업데이트 오류:',e);return false;}
 }
 
 // 삭제 기록을 서버(deleted_ids 테이블)에도 남겨서, 다른 브라우저/기기에서도
@@ -1048,7 +1056,9 @@ async function syncFromSupabase(){
           feedback:(t.feedback&&Object.keys(t.feedback).length?t.feedback:null)||(existing?existing.feedback:null)||{},
           // 결과보고서·교육진행안 "기타 보고 사항"도 다른 사람이 쓴 내용이 보이도록 서버 값을 받아옴
           reportEtc:t.report_etc||(existing?existing.reportEtc:'')||'',
-          agendaEtc:t.agenda_etc||(existing?existing.agendaEtc:'')||''};
+          agendaEtc:t.agenda_etc||(existing?existing.agendaEtc:'')||'',
+          // 교육진행안 "교육 대상자" 표의 열 숨김 설정도 다른 사람 화면에 그대로 보이도록 서버 값을 받아옴
+          attHideCols:(t.att_hide_cols&&t.att_hide_cols.length?t.att_hide_cols:null)||(existing?existing.attHideCols:null)||[]};
         if(existing){Object.assign(existing,mapped);}
         else{DB.trainings.push(mapped);}
       });
@@ -1568,8 +1578,9 @@ function toggleAttCol(tid, col){
   if(idx>=0)t.attHideCols.splice(idx,1);
   else t.attHideCols.push(col);
   save();
-  // attHideCols를 attendees와 함께 Supabase에 저장
-  sbPatch('trainings',tid,{attendees:t.attendees||[]});
+  // 다른 사람 화면에도 같은 컬럼 숨김 상태가 보이도록 서버에 저장
+  // — 예전엔 여기서 엉뚱하게 attendees를 보내서 attHideCols가 서버에 저장되지 않았음
+  sbPatch('trainings',tid,{att_hide_cols:t.attHideCols||[]});
   render();
 }
 function renderAttRows(){
@@ -2566,6 +2577,26 @@ function vReport(){
 let _reportPhotoSlot=0; // 현재 선택된 사진 슬롯
 let _reportPhotoTid=''; // 현재 교육 ID
 
+// 결과보고서 사진은 압축 없이 원본(최대 3MB)을 그대로 서버에 저장하고 있었음 —
+// 사진이 여러 장(최대 6장) 쌓이면 한 번의 저장 요청 용량이 너무 커져서 서버 저장이 조용히 실패하고,
+// 그래서 다른 사람 화면에는 사진이 반영되지 않는 문제가 있었음(로컬엔 보이니 본인은 "저장된 것처럼" 느낌).
+// 커넥팅데이 이미지(pasteConnectingImg)처럼 가로 1200px·JPEG 85%로 압축해서 용량을 크게 줄임.
+function compressImageDataUrl(dataUrl,maxW,quality){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>resolve(dataUrl); // 압축 실패 시 원본이라도 사용
+    img.src=dataUrl;
+  });
+}
+
 function _reportPhotoPasteHandler(e){
   if(!RPQ)return;
   const items=e.clipboardData?.items||[];
@@ -2576,14 +2607,14 @@ function _reportPhotoPasteHandler(e){
       if(!file)return;
       if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
       const reader=new FileReader();
-      reader.onload=ev=>{
+      reader.onload=async ev=>{
         const t=byId(DB.trainings,RPQ);
         if(!t.photos)t.photos=[];
         // 빈 슬롯 찾기
         let slot=t.photos.findIndex(p=>!p);
         if(slot===-1)slot=t.photos.length;
         if(slot>=6){toast('사진은 최대 6장까지 가능합니다');return;}
-        t.photos[slot]=ev.target.result;
+        t.photos[slot]=await compressImageDataUrl(ev.target.result,1200,0.85);
         sbPatch('trainings',RPQ,{photos:t.photos});
         save();render();toast(`📷 사진 ${slot+1} 추가되었습니다`);
       };
@@ -2602,10 +2633,10 @@ function handlePhotoPaste(e, tid, idx){
       const file=item.getAsFile();
       if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
       const reader=new FileReader();
-      reader.onload=ev=>{
+      reader.onload=async ev=>{
         const t=byId(DB.trainings,tid);
         if(!t.photos)t.photos=[];
-        t.photos[idx]=ev.target.result;
+        t.photos[idx]=await compressImageDataUrl(ev.target.result,1200,0.85);
         sbPatch('trainings',tid,{photos:t.photos});
         save();render();toast('사진이 추가되었습니다');
       };
@@ -2625,10 +2656,10 @@ function dropPhoto(e, tid, idx){
   if(!file){toast('이미지 파일을 드래그해주세요');return;}
   if(file.size>3*1024*1024){toast('3MB 이하 사진만 가능합니다');return;}
   const reader=new FileReader();
-  reader.onload=ev=>{
+  reader.onload=async ev=>{
     const t=byId(DB.trainings,tid);
     if(!t.photos)t.photos=[];
-    t.photos[idx]=ev.target.result;
+    t.photos[idx]=await compressImageDataUrl(ev.target.result,1200,0.85);
     sbPatch('trainings',tid,{photos:t.photos});
     save();render();toast('📷 사진이 추가되었습니다');
   };
@@ -2639,10 +2670,10 @@ function addPhoto(tid, idx, input){
   const file=input.files[0]; if(!file)return;
   if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=async e=>{
     const t=byId(DB.trainings,tid);
     if(!t.photos)t.photos=[];
-    t.photos[idx]=e.target.result;
+    t.photos[idx]=await compressImageDataUrl(e.target.result,1200,0.85);
     // Supabase 저장
     sbPatch('trainings',tid,{photos:t.photos});
     save();render();toast('사진이 추가되었습니다');
