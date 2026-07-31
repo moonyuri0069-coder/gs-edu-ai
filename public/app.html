@@ -483,6 +483,7 @@ function load(){
   DB.eduPlans=DB.eduPlans||[]; // 연간일정관리 — 연도별 교육 운영 캘린더
   DB.deletedEduPlanIds=DB.deletedEduPlanIds||[]; // 삭제한 연간일정 id (서버 삭제 실패 시 재등장 방지)
   DB.deletedTrainingIds=DB.deletedTrainingIds||[]; // 삭제한 교육 id (서버 삭제 실패 시 재등장 방지 — 다른 브라우저에도 전파됨)
+  DB.deletedInstructorIds=DB.deletedInstructorIds||[]; // 삭제한 강사 id (서버 삭제 실패 시 재등장 방지 — 다른 브라우저에도 전파됨)
   if(!DB._eduSeeded){ // 이 기능을 처음 쓰는 브라우저에만 27년 교육 운영안 견본 데이터를 한 번 채워줌(고정 id라 여러 브라우저에서 동시에 만들어도 서버에서 중복되지 않음)
     DB._eduSeeded=true;
     if(!DB.eduPlans.length)DB.eduPlans.push(eduPlanSeed2027());
@@ -1004,11 +1005,12 @@ async function syncDeletedIds(){
     DB.deletedLinkTabIds=DB.deletedLinkTabIds||[];
     DB.deletedEduPlanIds=DB.deletedEduPlanIds||[];
     DB.deletedTrainingIds=DB.deletedTrainingIds||[];
-    // response/test_record/link_tab 외에 training·edu_plan도 여기 등록해둬야 다른 브라우저에서 삭제한 게
-    // 이 브라우저에도 반영됨 — 예전엔 이 두 종류가 빠져 있어서, 삭제한 브라우저 본인 외에는
-    // (서버 DELETE가 실패했을 경우) 삭제된 교육/연간일정이 계속 남아있는 것처럼 보이는 문제가 있었음
+    DB.deletedInstructorIds=DB.deletedInstructorIds||[];
+    // response/test_record/link_tab 외에 training·edu_plan·instructor도 여기 등록해둬야 다른 브라우저에서
+    // 삭제한 게 이 브라우저에도 반영됨 — 예전엔 이 종류들이 빠져 있어서, 삭제한 브라우저 본인 외에는
+    // (서버 DELETE가 실패했을 경우) 삭제된 항목이 계속 남아있는 것처럼 보이는 문제가 있었음
     const map={response:DB.deletedResponseIds,test_record:DB.deletedTestRecordIds,link_tab:DB.deletedLinkTabIds,
-      training:DB.deletedTrainingIds,edu_plan:DB.deletedEduPlanIds};
+      training:DB.deletedTrainingIds,edu_plan:DB.deletedEduPlanIds,instructor:DB.deletedInstructorIds};
     rows.forEach(row=>{
       const arr=map[row.kind];
       if(!arr)return;
@@ -1019,6 +1021,7 @@ async function syncDeletedIds(){
     DB.testRecords=(DB.testRecords||[]).filter(r=>!DB.deletedTestRecordIds.includes(r.id));
     DB.linkTabs=(DB.linkTabs||[]).filter(t=>!DB.deletedLinkTabIds.includes(t.id));
     DB.trainings=(DB.trainings||[]).filter(t=>!DB.deletedTrainingIds.includes(t.id));
+    DB.instructors=(DB.instructors||[]).filter(i=>!DB.deletedInstructorIds.includes(i.id));
     DB.eduPlans=(DB.eduPlans||[]).filter(p=>!DB.deletedEduPlanIds.includes(p.id));
     if(!DB.linkTabs.length)DB.linkTabs=[{id:'default',name:'기본',links:[]}];
     save();
@@ -1058,7 +1061,9 @@ async function syncFromSupabase(){
           reportEtc:t.report_etc||(existing?existing.reportEtc:'')||'',
           agendaEtc:t.agenda_etc||(existing?existing.agendaEtc:'')||'',
           // 교육진행안 "교육 대상자" 표의 열 숨김 설정도 다른 사람 화면에 그대로 보이도록 서버 값을 받아옴
-          attHideCols:(t.att_hide_cols&&t.att_hide_cols.length?t.att_hide_cols:null)||(existing?existing.attHideCols:null)||[]};
+          attHideCols:(t.att_hide_cols&&t.att_hide_cols.length?t.att_hide_cols:null)||(existing?existing.attHideCols:null)||[],
+          // 결과보고서 "강의별 주요 의견" 편집본도 다른 사람 화면에 그대로 보이도록 서버 값을 받아옴
+          reportOpinions:(t.report_opinions&&Object.keys(t.report_opinions).length?t.report_opinions:null)||(existing?existing.reportOpinions:null)||{}};
         if(existing){Object.assign(existing,mapped);}
         else{DB.trainings.push(mapped);}
       });
@@ -1069,10 +1074,16 @@ async function syncFromSupabase(){
     });
     const instructors=await ir.json();
     if(instructors&&instructors.length){
+      const delSetI=new Set(DB.deletedInstructorIds||[]);
       instructors.forEach(i=>{
+        if(delSetI.has(i.id))return; // 다른 브라우저에서 이미 삭제한 강사는 다시 불러오지 않음
         const existing=byId(DB.instructors,i.id);
-        if(existing){Object.assign(existing,i);}
-        else{DB.instructors.push(i);}
+        // 서버 컬럼은 snake_case(manual_count)인데 앱은 camelCase(manualCount)로 읽으므로,
+        // 그냥 Object.assign으로 통째로 합치면 manualCount가 절대 채워지지 않아
+        // "수동 강의 횟수" 오버라이드가 다른 브라우저에는 영영 반영되지 않는 문제가 있었음
+        const mapped={...i, manualCount:(i.manual_count!==undefined&&i.manual_count!==null)?i.manual_count:(existing?existing.manualCount:undefined)};
+        if(existing){Object.assign(existing,mapped);}
+        else{DB.instructors.push(mapped);}
       });
     }
     // 응답 동기화
@@ -1345,6 +1356,11 @@ function editLectCount(iid, current){
 async function deleteInstructor(id){
   if(!confirm('이 강사를 삭제하시겠습니까?'))return;
   DB.instructors=DB.instructors.filter(i=>i.id!==id);
+  // 다른 삭제 기능들처럼 삭제 기록을 남겨야, 서버 DELETE가 실패하거나 다른 브라우저가
+  // 이미 캐시해둔 경우에도 이 강사가 다시 나타나지 않음 — 예전엔 이 기록이 아예 없었음
+  DB.deletedInstructorIds=DB.deletedInstructorIds||[];
+  if(!DB.deletedInstructorIds.includes(id))DB.deletedInstructorIds.push(id);
+  sbRecordDeletion('instructor',id);
   save();
   try{
     await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/instructors?id=eq.'+id,{
@@ -1866,7 +1882,9 @@ function saveInstr(edit){
   if(edit){Object.assign(byId(DB.instructors,edit),obj);iid=edit;}
   else{iid='i'+Date.now();DB.instructors.push({id:iid,...obj});}
   closeModal();save();
-  sbUpsert('instructors',{id:iid,...obj,manual_count:byId(DB.instructors,iid)?.manual_count||0});
+  // manualCount(camelCase)가 로컬 필드인데 여기서 manual_count(snake_case)로 잘못 읽고 있어서
+  // 항상 undefined→0이 되어, 이름/소개 등을 수정할 때마다 서버의 "수동 강의 횟수" 오버라이드가 0으로 초기화되던 버그
+  sbUpsert('instructors',{id:iid,...obj,manual_count:byId(DB.instructors,iid)?.manualCount||0});
   render();toast('저장되었습니다');
 }
 function vInstructorDetail(iid){
@@ -2360,6 +2378,59 @@ function lectOpinions(L,rsArr){
   const uniq=arr=>[...new Set(arr)].slice(0,4);
   return{goods:uniq(goods),imps:uniq(imps)};
 }
+// 결과보고서의 "강의별 주요 의견" 편집·삭제 저장 —
+// 예전엔 이 부분이 편집 가능한 것처럼 보였지만(점선 밑줄, 삭제 버튼) 실제로 저장하는 코드가 아예 없어서
+// 화면을 벗어나거나 새로고침하면 수정·삭제한 내용이 전부 원래대로 돌아가는 문제가 있었음.
+// 이제 t.reportOpinions에 편집본을 저장해두고, 편집한 적 없는 강의는 지금처럼 설문 응답에서 자동으로 뽑아 보여줌.
+function getLectOpinionList(t,L,rs){
+  const saved=t.reportOpinions&&t.reportOpinions.byLect&&t.reportOpinions.byLect[L.id];
+  if(saved)return saved;
+  const{goods,imps}=lectOpinions(L,rs);
+  const seen=new Set();
+  return[...goods.map((g,ix)=>({t:g,hi:ix===0})),...imps.map(g=>({t:g,hi:false}))]
+    .filter(x=>{const k=x.t.trim();if(seen.has(k))return false;seen.add(k);return true;});
+}
+function _ensureReportOpinionList(t,lectId){
+  if(!t.reportOpinions)t.reportOpinions={byLect:{}};
+  if(!t.reportOpinions.byLect)t.reportOpinions.byLect={};
+  if(!t.reportOpinions.byLect[lectId]){
+    // 처음 편집하는 강의면, 지금 화면에 보이는 자동계산 목록을 그대로 저장해서 편집 기준으로 삼음
+    t.reportOpinions.byLect[lectId]=getLectOpinionList(t,{id:lectId},respOf(t.id)).map(x=>({...x}));
+  }
+  return t.reportOpinions.byLect[lectId];
+}
+function saveLectOpinionEdit(tid,lectId,idx,newText){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  const arr=_ensureReportOpinionList(t,lectId);
+  if(arr[idx])arr[idx].t=newText;
+  save();
+  sbPatch('trainings',tid,{report_opinions:t.reportOpinions});
+  render();
+}
+function deleteLectOpinion(tid,lectId,idx){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  const arr=_ensureReportOpinionList(t,lectId);
+  arr.splice(idx,1);
+  save();
+  sbPatch('trainings',tid,{report_opinions:t.reportOpinions});
+  render();
+}
+function saveReportNeeds(tid,text){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  if(!t.reportOpinions)t.reportOpinions={byLect:{}};
+  t.reportOpinions.needs=text;
+  save();
+  sbPatch('trainings',tid,{report_opinions:t.reportOpinions});
+  render();
+}
+function saveReportEtcOpinion(tid,text){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  if(!t.reportOpinions)t.reportOpinions={byLect:{}};
+  t.reportOpinions.etc=text;
+  save();
+  sbPatch('trainings',tid,{report_opinions:t.reportOpinions});
+  render();
+}
 // AI 정제 포함 버전 (보고서 다운로드 시 사용)
 async function lectOpinionsAI(L,rsArr){
   const base=lectOpinions(L,rsArr);
@@ -2512,17 +2583,14 @@ function vReport(){
         <thead><tr><th style="width:130px">교육명</th><th>의견</th></tr></thead>
         <tbody>${lstats.map(({L})=>{
           const ins=byId(DB.instructors,L.instructorId);
-          const{goods,imps}=lectOpinions(L,rs);
-          // 중복 제거
-          const seen=new Set();
-          const all=[...goods.map((g,ix)=>({t:g,hi:ix===0})),...imps.map(g=>({t:g,hi:false}))]
-            .filter(x=>{const k=x.t.trim();if(seen.has(k))return false;seen.add(k);return true;});
+          const all=getLectOpinionList(t,L,rs);
           return `<tr>
             <td class="lname">${esc(L.title)}<br>
               <span style="color:#79807a;font-weight:400">(${esc(ins?.field||'')} ${esc(ins?.name||'')})</span></td>
             <td><ul>${all.length?all.map((x,xi)=>`<li class="${x.hi?'hi':''}" style="display:flex;align-items:flex-start;gap:4px">
-                <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="flex:1;outline:none;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}">${esc(x.t)}</span>
-                ${session?`<button class="no-print" onclick="this.closest('li').remove()" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:.75rem;padding:0 2px;line-height:1;flex-shrink:0" title="삭제">✕</button>`:''}
+                <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="flex:1;outline:none;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
+                  onblur="saveLectOpinionEdit('${t.id}','${L.id}',${xi},this.innerText.trim())">${esc(x.t)}</span>
+                ${session?`<button class="no-print" onclick="deleteLectOpinion('${t.id}','${L.id}',${xi})" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:.75rem;padding:0 2px;line-height:1;flex-shrink:0" title="삭제">✕</button>`:''}
               </li>`).join('')
               :'<li style="color:#aaa">의견 없음</li>'}</ul></td></tr>`;}).join('')}
         </tbody>
@@ -2530,9 +2598,11 @@ function vReport(){
       <div style="margin-top:14px"><div class="rp-sec">듣고 싶은 강의 컨텐츠에 대한 의견</div>
         <div class="rp-needs">
           <b>*듣고 싶은 강의 컨텐츠</b><br>
-          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}">${needs.length?': '+needs.slice(0,6).map(n=>esc(n)).join(', '):': 특이사항 없음'}</span>
+          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
+            onblur="saveReportNeeds('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.needs!=null)?esc(t.reportOpinions.needs).replace(/\n/g,'<br>'):(needs.length?': '+needs.slice(0,6).map(n=>esc(n)).join(', '):': 특이사항 없음')}</span>
           <br><b>*기타 의견</b><br>
-          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}">${etcs.length?': '+etcs.slice(0,4).map(e=>esc(e)).join('<br>: '):': 없음'}</span>
+          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
+            onblur="saveReportEtcOpinion('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.etc!=null)?esc(t.reportOpinions.etc).replace(/\n/g,'<br>'):(etcs.length?': '+etcs.slice(0,4).map(e=>esc(e)).join('<br>: '):': 없음')}</span>
         </div>
       </div>
       <div style="margin-top:12px"><div class="rp-sec">AI 종합 의견</div>
