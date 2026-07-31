@@ -2599,10 +2599,10 @@ function vReport(){
         <div class="rp-needs">
           <b>*듣고 싶은 강의 컨텐츠</b><br>
           <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
-            onblur="saveReportNeeds('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.needs!=null)?esc(t.reportOpinions.needs).replace(/\n/g,'<br>'):(needs.length?': '+needs.slice(0,6).map(n=>esc(n)).join(', '):': 특이사항 없음')}</span>
+            onblur="saveReportNeeds('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.needs!=null)?esc(t.reportOpinions.needs).replace(/\n/g,'<br>'):(needs.length?': '+needs.map(n=>esc(n)).join(', '):': 특이사항 없음')}</span>
           <br><b>*기타 의견</b><br>
           <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
-            onblur="saveReportEtcOpinion('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.etc!=null)?esc(t.reportOpinions.etc).replace(/\n/g,'<br>'):(etcs.length?': '+etcs.slice(0,4).map(e=>esc(e)).join('<br>: '):': 없음')}</span>
+            onblur="saveReportEtcOpinion('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.etc!=null)?esc(t.reportOpinions.etc).replace(/\n/g,'<br>'):(etcs.length?': '+etcs.map(e=>esc(e)).join('<br>: '):': 없음')}</span>
         </div>
       </div>
       <div style="margin-top:12px"><div class="rp-sec">AI 종합 의견</div>
