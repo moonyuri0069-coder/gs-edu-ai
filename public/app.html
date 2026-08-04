@@ -1335,6 +1335,50 @@ async function deleteCheckin(tid, empNo){
   render(); toast('출석 기록이 삭제되었습니다');
 }
 
+// 관리자가 사번·성명을 직접 입력해서 출석자를 수동으로 추가하는 기능.
+// QR 등록 도중 예전 버그로 누락된 분을 다시 채워 넣거나, QR 스캔이 어려운 분을 대신 등록할 때 사용.
+function openManualCheckin(tid){
+  openModal('출석자 수동 추가',
+    `<div class="card-sub" style="margin-bottom:10px">사번과 성명을 입력해서 출석자를 직접 추가할 수 있어요.</div>
+     <div class="fld-group"><label class="fld">사번</label><input class="input" id="mcEmpNo" placeholder="예) 12345678"></div>
+     <div class="fld-group"><label class="fld">성명</label><input class="input" id="mcName" placeholder="예) 홍길동"></div>`,
+    `<button class="btn" onclick="closeModal()">취소</button>
+     <button class="btn primary" onclick="saveManualCheckin('${tid}')">추가</button>`);
+}
+async function saveManualCheckin(tid){
+  const empNo=$('#mcEmpNo').value.trim();
+  const name=$('#mcName').value.trim();
+  if(!empNo||!name){toast('사번과 성명을 모두 입력해주세요');return;}
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  if((t.checkins||[]).find(c=>c.empNo===empNo)){toast('이미 등록된 사번입니다');return;}
+  const at=new Date().toISOString();
+  let usedNewTable=false;
+  try{
+    const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/checkins',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
+      body:JSON.stringify({id:tid+'_'+empNo,training_id:tid,emp_no:empNo,name,at})
+    });
+    if(res.status===409){toast('이미 등록된 사번입니다');return;}
+    if(res.ok)usedNewTable=true;
+  }catch(e){console.warn('출석 수동 추가 오류(신규 테이블):',e);}
+  if(!t.checkins)t.checkins=[];
+  t.checkins.push({empNo,name,at});
+  save();
+  if(!usedNewTable){
+    // checkins 테이블이 아직 없는 경우(SQL 미실행) 대비 폴백
+    try{
+      await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/trainings?id=eq.'+tid,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','apikey':'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsZHBqdmxlZnVoeWZhY3Jtd3NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1NjMxNDIsImV4cCI6MjA5OTEzOTE0Mn0.YuG62v1942mOW-ew-cAvkMfXnEnfgW_AFGmqTt0uThM','Prefer':'return=minimal'},
+        body:JSON.stringify({checkins:t.checkins})
+      });
+    }catch(e){console.warn('출석 수동 추가 오류(구 방식):',e);}
+  }
+  closeModal();render();toast('✅ 출석자가 추가됐어요');
+}
+
 async function deleteAttendee(tid, idx){
   if(!confirm('이 참석자를 삭제하시겠습니까?'))return;
   const t=byId(DB.trainings,tid);
@@ -2911,6 +2955,7 @@ function vGuide(){
         ${GUIDE_SLIDE===0?`
           <div style="font-size:.8rem;color:var(--ink3)">출석자 <b style="color:var(--green)">${(t.checkins||[]).length}명</b></div>
           <button class="btn sm" onclick="nav('#/attend/${GUIDE_SEL}')">출석 URL 열기</button>
+          <button class="btn sm ghost" onclick="openManualCheckin('${GUIDE_SEL}')">➕ 수동 추가</button>
         `:''}
         ${GUIDE_SLIDE===3?`
           <div style="font-size:.8rem;color:var(--ink3)">응답 <b style="color:var(--green)">${respOf(GUIDE_SEL).length}건</b></div>
