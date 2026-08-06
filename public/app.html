@@ -3487,16 +3487,22 @@ function vFeedback(){
   if(!t.feedback[selInstr])t.feedback[selInstr]={goods:[],imps:[]};
   const fb=t.feedback[selInstr];
   // 초기 로드 시 설문 의견으로 초기화
-  if(!fb._loaded){
+  // — 예전엔 한번 _loaded=true로 저장되면 그 내용이 비어있어도(예: 응답이 아직 안 쌓였거나
+  //   isValidOpinion 버그로 잘못 걸러졌을 때) 다시는 채워주지 않아서, 첫번째 강사(가장 먼저
+  //   자동 로드되어 빈 채로 캐시되기 쉬움)의 좋았던점/아쉬운점이 영영 안 나오는 문제가 있었음.
+  //   goods/imps가 둘 다 비어있으면 계속 재시도하도록 조건을 바꿈.
+  if(!fb._loaded||(!fb.goods.length&&!fb.imps.length)){
     const allGoods=[...new Set(lectData.flatMap(d=>d.goods))];
     const allImps=[...new Set(lectData.flatMap(d=>d.imps))];
     if(!fb.goods.length)fb.goods=[...allGoods];
     if(!fb.imps.length)fb.imps=[...allImps];
     fb._loaded=true;
-    save();
-    // 여기서 서버에도 바로 저장해둬야 함 — 로컬에만 save()해두면, 방금 채운 내용이 서버에 반영되기 전에
-    // 30초 주기 동기화가 서버의 예전(빈) 값으로 덮어써버려서 자동으로 채워진 의견이 사라지는 것처럼 보이는 문제가 있었음
-    sbPatch('trainings',FBQ,{feedback:t.feedback});
+    if(fb.goods.length||fb.imps.length){
+      save();
+      // 여기서 서버에도 바로 저장해둬야 함 — 로컬에만 save()해두면, 방금 채운 내용이 서버에 반영되기 전에
+      // 30초 주기 동기화가 서버의 예전(빈) 값으로 덮어써버려서 자동으로 채워진 의견이 사라지는 것처럼 보이는 문제가 있었음
+      sbPatch('trainings',FBQ,{feedback:t.feedback});
+    }
   }
 
   const goodRows=fb.goods.map((g,gi)=>`
