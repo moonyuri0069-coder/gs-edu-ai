@@ -211,6 +211,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .rp-sched th{background:#0e5a34;color:#fff;padding:3px 6px;text-align:center;font-weight:700}
 .rp-sched td{padding:3px 6px;border:1px solid #e4e7e2;text-align:center;font-size:.78rem}
 .rp-photos-full{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+.rp-photos-full[data-frame="4"]{grid-template-columns:repeat(2,1fr)}
 .rp-photo-ph-sm{background:#f0f4f1;border-radius:8px;aspect-ratio:4/3;min-height:120px;
   display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;position:relative;overflow:hidden}
 .rp-kpi-row{display:flex;gap:6px;margin:8px 0}
@@ -835,7 +836,8 @@ window.addEventListener('paste', function(e){
           if(!t.photos) t.photos = [];
           let slot = t.photos.findIndex(p => !p);
           if(slot === -1) slot = t.photos.length;
-          if(slot >= 6){ toast('사진은 최대 6장까지 가능합니다'); return; }
+          const maxSlots=t.photoFrame||6;
+          if(slot >= maxSlots){ toast(`사진은 최대 ${maxSlots}장까지 가능합니다`); return; }
           t.photos[slot] = ev.target.result;
           sbPatch('trainings', RPQ, {photos: t.photos});
           save(); render(); toast('📷 사진 ' + (slot+1) + ' 추가되었습니다');
@@ -2553,6 +2555,7 @@ function vReport(){
   const tp=BUDGET.reduce((s,r)=>s+r.plan,0),ta=BUDGET.reduce((s,r)=>s+r.actual,0),td=ta-tp;
   const diffFmt=(d)=>d===0?'-':d>0?'+'+d.toLocaleString():'△'+Math.abs(d).toLocaleString();
   const diffCls=(d)=>d<0?'minus':d>0?'plus':'';
+  const photoFrame=t.photoFrame||6; // 사진 프레임(장수) — 3장/4장(2x2)/5,6장(기존 3열 그리드 유지)
 
   return sel+`
   <div class="report-a4" id="reportA4">
@@ -2604,10 +2607,15 @@ function vReport(){
   <hr class="rp-page-break">
   <!-- ═══ 2페이지 ═══ -->
   <div class="rp-section-box" style="margin-bottom:8px">
-    <div class="rp-section-head">교육 사진</div>
+    <div class="rp-section-head" style="display:flex;align-items:center;justify-content:space-between">
+      <span>교육 사진</span>
+      ${session?`<select class="select no-print" style="width:auto;height:auto;padding:2px 6px;font-size:.65rem;text-transform:none;letter-spacing:normal;font-weight:600;color:#333" onchange="changePhotoFrame('${t.id}',this.value)" title="사진 프레임(장수) 선택">
+        ${[3,4,5,6].map(n=>`<option value="${n}" ${photoFrame===n?'selected':''}>${n}장</option>`).join('')}
+      </select>`:''}
+    </div>
     <div class="rp-section-body">
-      <div class="rp-photos-full">
-        ${[...Array(6)].map((_,pi)=>{
+      <div class="rp-photos-full" data-frame="${photoFrame}">
+        ${[...Array(photoFrame)].map((_,pi)=>{
           const ph=(t.photos||[])[pi];
           return ph
             ? `<div style="position:relative;aspect-ratio:4/3">
@@ -2658,9 +2666,6 @@ function vReport(){
           <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
             onblur="saveReportEtcOpinion('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.etc!=null)?esc(t.reportOpinions.etc).replace(/\n/g,'<br>'):(etcs.length?': '+etcs.map(e=>esc(e)).join('<br>: '):': 없음')}</span>
         </div>
-      </div>
-      <div style="margin-top:12px"><div class="rp-sec">AI 종합 의견</div>
-        <div class="rp-ai-box">${esc(a?.summary||'')}<br><br><b>향후 개선계획:</b> ${esc(a?.plan||'')}</div>
       </div>
     </div>
     <div>
@@ -2737,7 +2742,8 @@ function _reportPhotoPasteHandler(e){
         // 빈 슬롯 찾기
         let slot=t.photos.findIndex(p=>!p);
         if(slot===-1)slot=t.photos.length;
-        if(slot>=6){toast('사진은 최대 6장까지 가능합니다');return;}
+        const maxSlots=t.photoFrame||6;
+        if(slot>=maxSlots){toast(`사진은 최대 ${maxSlots}장까지 가능합니다`);return;}
         t.photos[slot]=await compressImageDataUrl(ev.target.result,1200,0.85);
         sbPatch('trainings',RPQ,{photos:t.photos});
         save();render();toast(`📷 사진 ${slot+1} 추가되었습니다`);
@@ -2803,6 +2809,16 @@ function addPhoto(tid, idx, input){
     save();render();toast('사진이 추가되었습니다');
   };
   reader.readAsDataURL(file);
+}
+function changePhotoFrame(tid,val){
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  const n=parseInt(val)||6;
+  t.photoFrame=n;
+  // 프레임을 줄이면 넘치는 사진 슬롯은 잘라냄
+  if(t.photos&&t.photos.length>n)t.photos=t.photos.slice(0,n);
+  sbPatch('trainings',tid,{photo_frame:n,photos:t.photos});
+  save();render();toast(`📷 사진 프레임을 ${n}장으로 변경했습니다`);
 }
 function removePhoto(tid,idx){
   const t=byId(DB.trainings,tid);
