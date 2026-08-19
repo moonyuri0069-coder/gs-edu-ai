@@ -212,6 +212,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .rp-sched td{padding:3px 6px;border:1px solid #e4e7e2;text-align:center;font-size:.78rem}
 .rp-photos-full{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
 .rp-photos-full[data-frame="4"]{grid-template-columns:repeat(2,1fr)}
+.rp-photos-full>*{min-width:0;overflow:hidden} /* 그리드 아이템이 이미지 원본 크기 때문에 칸 밖으로 삐져나오는 문제 수정 */
 .rp-photo-ph-sm{background:#f0f4f1;border-radius:8px;aspect-ratio:4/3;min-height:120px;
   display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;position:relative;overflow:hidden}
 .rp-kpi-row{display:flex;gap:6px;margin:8px 0}
