@@ -2672,9 +2672,6 @@ function vReport(){
             onblur="saveReportEtcOpinion('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.etc!=null)?esc(t.reportOpinions.etc).replace(/\n/g,'<br>'):(etcs.length?': '+etcs.map(e=>esc(e)).join('<br>: '):': 없음')}</span>
         </div>
       </div>
-      <div style="margin-top:12px"><div class="rp-sec">AI 종합 의견</div>
-        <div class="rp-ai-box">${esc(a?.summary||'')}<br><br><b>향후 개선계획:</b> ${esc(a?.plan||'')}</div>
-      </div>
     </div>
     <div>
       <div class="rp-sec">'추천하고 싶은 강의'에 대한 의견</div>
