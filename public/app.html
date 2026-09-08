@@ -210,7 +210,9 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .rp-sched{width:100%;border-collapse:collapse;font-size:.78rem;margin-top:4px}
 .rp-sched th{background:#0e5a34;color:#fff;padding:3px 6px;text-align:center;font-weight:700}
 .rp-sched td{padding:3px 6px;border:1px solid #e4e7e2;text-align:center;font-size:.78rem}
-.rp-photos-full{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+.rp-photos-full{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-bottom:12px}
+.rp-photo-box{position:relative;box-sizing:border-box;aspect-ratio:4/3;overflow:hidden;border-radius:8px}
+.rp-photo-box img{display:block}
 .rp-photo-ph-sm{background:#f0f4f1;border-radius:8px;aspect-ratio:4/3;min-height:120px;
   display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;position:relative;overflow:hidden}
 .rp-kpi-row{display:flex;gap:6px;margin:8px 0}
@@ -1063,7 +1065,9 @@ async function syncFromSupabase(){
           // 교육진행안 "교육 대상자" 표의 열 숨김 설정도 다른 사람 화면에 그대로 보이도록 서버 값을 받아옴
           attHideCols:(t.att_hide_cols&&t.att_hide_cols.length?t.att_hide_cols:null)||(existing?existing.attHideCols:null)||[],
           // 결과보고서 "강의별 주요 의견" 편집본도 다른 사람 화면에 그대로 보이도록 서버 값을 받아옴
-          reportOpinions:(t.report_opinions&&Object.keys(t.report_opinions).length?t.report_opinions:null)||(existing?existing.reportOpinions:null)||{}};
+          reportOpinions:(t.report_opinions&&Object.keys(t.report_opinions).length?t.report_opinions:null)||(existing?existing.reportOpinions:null)||{},
+          // 결과보고서 "교육 사진" 개수 선택값도 다른 사람 화면에 그대로 보이도록 서버 값을 받아옴
+          photoCount:(t.photo_count!==undefined&&t.photo_count!==null)?t.photo_count:((existing&&existing.photoCount)||6)};
         if(existing){Object.assign(existing,mapped);}
         else{DB.trainings.push(mapped);}
       });
@@ -2506,6 +2510,9 @@ function vReport(){
    <span class="card-sub">2페이지 · 실제 보고서 형식</span></div>`;
   if(!t||!RPQ)return sel+'<div class="empty" style="padding-top:60px;font-size:1.1rem">⬆ 교육을 선택하고 조회하세요</div>';
   const rs=respOf(t.id);const a=DB.ai[t.id]||null;
+  // 교육 사진 개수(선택 가능) — 빈 칸이 안 보이도록 개수에 맞춰 줄 구성을 다르게 함 (1/2/3장은 한 줄, 4장은 2x2, 5·6장은 3열)
+  const photoCount=t.photoCount||6;
+  const photoCols=photoCntToCols(photoCount);
   // lstats: 첫/마지막 제외 + 동일강사 중복 제거
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
@@ -2604,18 +2611,24 @@ function vReport(){
   <hr class="rp-page-break">
   <!-- ═══ 2페이지 ═══ -->
   <div class="rp-section-box" style="margin-bottom:8px">
-    <div class="rp-section-head">교육 사진</div>
+    <div class="rp-section-head" style="display:flex;align-items:center;justify-content:space-between">
+      <span>교육 사진</span>
+      ${session?`<span class="no-print" style="font-weight:400;font-size:.72rem;display:flex;align-items:center;gap:3px">사진 개수:
+        ${[1,2,3,4,5,6].map(n=>`<button class="btn sm ${photoCount===n?'primary':'ghost'}" style="padding:2px 8px;min-width:0" onclick="setPhotoCount('${t.id}',${n})">${n}</button>`).join('')}
+      </span>`:''}
+    </div>
     <div class="rp-section-body">
       <div class="rp-photos-full">
-        ${[...Array(6)].map((_,pi)=>{
+        ${[...Array(photoCount)].map((_,pi)=>{
           const ph=(t.photos||[])[pi];
+          const basis=`flex:0 0 calc((100% - ${12*(photoCols-1)}px)/${photoCols})`;
           return ph
-            ? `<div style="position:relative;aspect-ratio:4/3">
-                <img src="${ph}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">
+            ? `<div class="rp-photo-box" style="${basis}">
+                <img src="${ph}" style="width:100%;height:100%;object-fit:cover">
                 ${session?`<button class="no-print" onclick="removePhoto('${t.id}',${pi})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center">✕</button>`:''}
               </div>`
             : session
-              ? `<label style="cursor:pointer;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:#f0f4f1;border-radius:4px;border:1.5px dashed #cdd8cb;flex-direction:column;gap:4px;transition:.2s"
+              ? `<label class="rp-photo-box" style="${basis};cursor:pointer;display:flex;align-items:center;justify-content:center;background:#f0f4f1;border:1.5px dashed #cdd8cb;flex-direction:column;gap:4px;transition:.2s"
                   onclick="this.querySelector('input').click()"
                   ondragover="event.preventDefault();this.style.background='#d4e8d8';this.style.borderColor='#0e5a34'"
                   ondragleave="this.style.background='#f0f4f1';this.style.borderColor='#cdd8cb'"
@@ -2624,7 +2637,7 @@ function vReport(){
                   <span style="font-size:.6rem;color:#aaa">클릭·드래그·Ctrl+V</span>
                   <input type="file" accept="image/*" style="display:none" onchange="addPhoto('${t.id}',${pi},this)">
                 </label>`
-              : `<div class="rp-photo-ph-sm">📷 ${pi+1}</div>`;
+              : `<div class="rp-photo-box rp-photo-ph-sm" style="${basis}">📷 ${pi+1}</div>`;
         }).join('')}
       </div>
       ${session?'<div class="no-print" style="font-size:.65rem;color:#888;margin-top:4px">📷 클릭하여 사진 추가 (JPG/PNG)</div>':''}
@@ -2790,6 +2803,20 @@ function dropPhoto(e, tid, idx){
   reader.readAsDataURL(file);
 }
 
+// 선택한 사진 개수에 맞는 한 줄당 장수 — 1~3장은 그 수만큼 한 줄, 4장은 2x2, 5·6장은 3열
+function photoCntToCols(n){
+  if(n===4)return 2;
+  if(n<=3)return Math.max(1,n);
+  return 3;
+}
+function setPhotoCount(tid,n){
+  const t=byId(DB.trainings,tid);
+  if(!t)return;
+  t.photoCount=n;
+  save();
+  sbPatch('trainings',tid,{photo_count:n});
+  render();
+}
 function addPhoto(tid, idx, input){
   const file=input.files[0]; if(!file)return;
   if(file.size>3*1024*1024){toast('사진은 3MB 이하로 올려주세요');return;}
