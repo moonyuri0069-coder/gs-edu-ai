@@ -211,8 +211,6 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .rp-sched th{background:#0e5a34;color:#fff;padding:3px 6px;text-align:center;font-weight:700}
 .rp-sched td{padding:3px 6px;border:1px solid #e4e7e2;text-align:center;font-size:.78rem}
 .rp-photos-full{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
-.rp-photos-full[data-frame="4"]{grid-template-columns:repeat(2,1fr)}
-.rp-photos-full>*{min-width:0;overflow:hidden} /* 그리드 아이템이 이미지 원본 크기 때문에 칸 밖으로 삐져나오는 문제 수정 */
 .rp-photo-ph-sm{background:#f0f4f1;border-radius:8px;aspect-ratio:4/3;min-height:120px;
   display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:pointer;position:relative;overflow:hidden}
 .rp-kpi-row{display:flex;gap:6px;margin:8px 0}
@@ -837,8 +835,7 @@ window.addEventListener('paste', function(e){
           if(!t.photos) t.photos = [];
           let slot = t.photos.findIndex(p => !p);
           if(slot === -1) slot = t.photos.length;
-          const maxSlots=t.photoFrame||6;
-          if(slot >= maxSlots){ toast(`사진은 최대 ${maxSlots}장까지 가능합니다`); return; }
+          if(slot >= 6){ toast('사진은 최대 6장까지 가능합니다'); return; }
           t.photos[slot] = ev.target.result;
           sbPatch('trainings', RPQ, {photos: t.photos});
           save(); render(); toast('📷 사진 ' + (slot+1) + ' 추가되었습니다');
@@ -2556,7 +2553,6 @@ function vReport(){
   const tp=BUDGET.reduce((s,r)=>s+r.plan,0),ta=BUDGET.reduce((s,r)=>s+r.actual,0),td=ta-tp;
   const diffFmt=(d)=>d===0?'-':d>0?'+'+d.toLocaleString():'△'+Math.abs(d).toLocaleString();
   const diffCls=(d)=>d<0?'minus':d>0?'plus':'';
-  const photoFrame=t.photoFrame||6; // 사진 프레임(장수) — 3장/4장(2x2)/5,6장(기존 3열 그리드 유지)
 
   return sel+`
   <div class="report-a4" id="reportA4">
@@ -2608,15 +2604,10 @@ function vReport(){
   <hr class="rp-page-break">
   <!-- ═══ 2페이지 ═══ -->
   <div class="rp-section-box" style="margin-bottom:8px">
-    <div class="rp-section-head" style="display:flex;align-items:center;justify-content:space-between">
-      <span>교육 사진</span>
-      ${session?`<select class="select no-print" style="width:auto;height:auto;padding:2px 6px;font-size:.65rem;text-transform:none;letter-spacing:normal;font-weight:600;color:#333" onchange="changePhotoFrame('${t.id}',this.value)" title="사진 프레임(장수) 선택">
-        ${[3,4,5,6].map(n=>`<option value="${n}" ${photoFrame===n?'selected':''}>${n}장</option>`).join('')}
-      </select>`:''}
-    </div>
+    <div class="rp-section-head">교육 사진</div>
     <div class="rp-section-body">
-      <div class="rp-photos-full" data-frame="${photoFrame}">
-        ${[...Array(photoFrame)].map((_,pi)=>{
+      <div class="rp-photos-full">
+        ${[...Array(6)].map((_,pi)=>{
           const ph=(t.photos||[])[pi];
           return ph
             ? `<div style="position:relative;aspect-ratio:4/3">
@@ -2667,6 +2658,9 @@ function vReport(){
           <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
             onblur="saveReportEtcOpinion('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.etc!=null)?esc(t.reportOpinions.etc).replace(/\n/g,'<br>'):(etcs.length?': '+etcs.map(e=>esc(e)).join('<br>: '):': 없음')}</span>
         </div>
+      </div>
+      <div style="margin-top:12px"><div class="rp-sec">AI 종합 의견</div>
+        <div class="rp-ai-box">${esc(a?.summary||'')}<br><br><b>향후 개선계획:</b> ${esc(a?.plan||'')}</div>
       </div>
     </div>
     <div>
@@ -2743,8 +2737,7 @@ function _reportPhotoPasteHandler(e){
         // 빈 슬롯 찾기
         let slot=t.photos.findIndex(p=>!p);
         if(slot===-1)slot=t.photos.length;
-        const maxSlots=t.photoFrame||6;
-        if(slot>=maxSlots){toast(`사진은 최대 ${maxSlots}장까지 가능합니다`);return;}
+        if(slot>=6){toast('사진은 최대 6장까지 가능합니다');return;}
         t.photos[slot]=await compressImageDataUrl(ev.target.result,1200,0.85);
         sbPatch('trainings',RPQ,{photos:t.photos});
         save();render();toast(`📷 사진 ${slot+1} 추가되었습니다`);
@@ -2810,16 +2803,6 @@ function addPhoto(tid, idx, input){
     save();render();toast('사진이 추가되었습니다');
   };
   reader.readAsDataURL(file);
-}
-function changePhotoFrame(tid,val){
-  const t=byId(DB.trainings,tid);
-  if(!t)return;
-  const n=parseInt(val)||6;
-  t.photoFrame=n;
-  // 프레임을 줄이면 넘치는 사진 슬롯은 잘라냄
-  if(t.photos&&t.photos.length>n)t.photos=t.photos.slice(0,n);
-  sbPatch('trainings',tid,{photo_frame:n,photos:t.photos});
-  save();render();toast(`📷 사진 프레임을 ${n}장으로 변경했습니다`);
 }
 function removePhoto(tid,idx){
   const t=byId(DB.trainings,tid);
@@ -3340,13 +3323,13 @@ function renderAgendaDoc(t){
     ${session?`<button class="btn sm no-print" style="margin-left:10px" onclick="openBudget(AQ)">💰 비용 입력</button>`:''}
   </div>
   <table class="ag-table">
-    <thead><tr><th>예산 항목</th><th style="width:22%;text-align:center">예산(원)</th><th>상세</th><th style="width:12%">비고</th></tr></thead>
+    <thead><tr><th style="width:16%">예산 항목</th><th style="width:16%;text-align:center">예산(원)</th><th style="width:34%">상세</th><th style="width:34%">비고</th></tr></thead>
     <tbody>
       ${BUDGET.map(b=>`<tr>
         <td style="font-weight:600">${esc(b.item)}</td>
         <td style="text-align:right">${b.plan?b.plan.toLocaleString()+'원':'-'}</td>
-        <td style="color:#555;font-size:.8rem">${esc(b.note||'')}</td>
-        <td style="font-size:.78rem;color:#888">${esc(b.remark||'')}</td>
+        <td style="color:#555;font-size:.8rem;word-break:keep-all">${esc(b.note||'')}</td>
+        <td style="font-size:.78rem;color:#888;word-break:keep-all">${esc(b.remark||'')}</td>
       </tr>`).join('')}
       <tr style="background:#f0f4f1;font-weight:900">
         <td>計</td><td style="text-align:right;color:#0e5a34">${totalPlan.toLocaleString()}원</td>
@@ -3375,49 +3358,44 @@ async function printAgenda(){
   if(!doc||!AQ){toast('교육을 먼저 선택해주세요');return;}
   const t=byId(DB.trainings,AQ);
   if(!t){toast('교육을 먼저 선택해주세요');return;}
-  try{
-    toast('📄 PDF 생성 중...(잠시 기다려주세요)');
-    // no-print 요소 임시 숨기기
-  const noPrints=doc.querySelectorAll('.no-print');
-  noPrints.forEach(el=>el.style.display='none');
-  const canvas=await html2canvas(doc,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
-  noPrints.forEach(el=>el.style.display='');
-    const imgData=canvas.toDataURL('image/jpeg',0.95);
-    const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const pdfW=pdf.internal.pageSize.getWidth();
-    const pdfH=pdf.internal.pageSize.getHeight();
-    const ratio=pdfW/canvas.width;
-    const totalH=canvas.height*ratio;
-    let y=0;
-    while(y<totalH){
-      if(y>0)pdf.addPage();
-      pdf.addImage(imgData,'JPEG',0,-y,pdfW,totalH);
-      y+=pdfH;
-    }
-    pdf.save(`${t.name}_${t.round}차_교육진행안.pdf`);
-    toast('✅ PDF 다운로드 완료!');
-  }catch(e){
-    console.error('PDF 오류:',e);
-    toast('⚠️ PDF 생성 실패 - 미리보기로 전환');
-    const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
-      .flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join('\n');
-    const w=window.open('','_blank');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>${t.name} ${t.round}차 교육진행안</title>
-    <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;background:#f5f5f5;padding:24px}
-    .dl-bar{background:#0e5a34;color:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:16px}
-    .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:8px 18px;border-radius:6px;cursor:pointer;font-weight:700}
+  // 예전엔 html2canvas로 화면을 통째로 캡처해서 이미지 한장을 만든 다음 PDF 페이지 높이만큼
+  // 잘라 붙이는 방식이었는데, 표 중간에서 페이지가 잘리면서 내용이 겹쳐 보이거나 잘려보이는
+  // 문제가 있었음. 결과보고서(printReport)와 같은 방식으로 새창을 열어 브라우저 자체 인쇄 기능을
+  // 쓰도록 바꿈 — 브라우저가 표/행 단위로 자연스럽게 페이지를 나눠줘서 중간 잘림이 없음.
+  const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
+    .flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join('\n');
+  const cloned=doc.cloneNode(true);
+  cloned.querySelectorAll('.no-print').forEach(el=>el.remove());
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>${t.name} ${t.round}차 교육진행안</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Malgun Gothic',sans-serif;background:#fff;padding:20px}
+    .agenda-wrap{max-width:800px;margin:0 auto}
+    .dl-bar{background:#0e5a34;color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;border-radius:8px;margin-bottom:14px}
+    .dl-bar button{background:#fff;color:#0e5a34;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:700}
     .no-print{display:none!important}
     [contenteditable]{border:none!important;outline:none!important;cursor:default!important}
-    @media print{.dl-bar{display:none}}
-    .agenda-wrap{max-width:800px;margin:0 auto}${allStyles}</style></head><body>
-    <div class="dl-bar"><span>📋 ${t.name} ${t.round}차 교육진행안</span>
-    <button onclick="window.print()">🖨️ PDF로 저장</button></div>
-    <div class="agenda-wrap">${doc.outerHTML}</div>
-    </body></html>`);
-    w.document.close();
-  }
+    table{page-break-inside:auto}
+    tr{page-break-inside:avoid;page-break-after:auto}
+    thead{display:table-header-group}
+    @media print{
+      .dl-bar{display:none!important}
+      body{padding:0}
+      .agenda-wrap{max-width:100%}
+    }
+    ${allStyles}
+  </style>
+  </head><body>
+  <div class="dl-bar">
+    <span>📋 ${t.name} ${t.round}차 교육진행안</span>
+    <button onclick="window.print()">🖨️ PDF로 저장</button>
+  </div>
+  <div class="agenda-wrap">${cloned.outerHTML}</div>
+  </body></html>`);
+  w.document.close();
+  toast('✅ 새창에서 PDF로 저장하세요!');
 }
 
 /* ═══════════ 설정 ═══════════ */
