@@ -2558,7 +2558,7 @@ function vReport(){
   <div class="report-a4" id="reportA4">
   <!-- ═══ 1페이지 ═══ -->
   <div class="rp-p1-title">${esc(t.name)} ${t.round}차수 집합교육 결과보고</div>
-  <div class="rp-subtitle" contenteditable="${!session?'false':'true'}"
+  <div class="rp-subtitle" contenteditable="${!session?'false':'true'}" spellcheck="false"
     style="outline:none;${session?'border:1.5px dashed #16a34a;':''}cursor:${session?'text':'default'}"
     id="rpSubtitle"
     onblur="const t=byId(DB.trainings,RPQ);if(t){t.subtitle=this.innerText.trim();save();sbPatch('trainings',RPQ,{subtitle:t.subtitle});}"
@@ -2642,7 +2642,7 @@ function vReport(){
             <td class="lname">${esc(L.title)}<br>
               <span style="color:#79807a;font-weight:400">(${esc(ins?.field||'')} ${esc(ins?.name||'')})</span></td>
             <td><ul>${all.length?all.map((x,xi)=>`<li class="${x.hi?'hi':''}" style="display:flex;align-items:flex-start;gap:4px">
-                <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="flex:1;outline:none;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
+                <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" spellcheck="false" style="flex:1;outline:none;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
                   onblur="saveLectOpinionEdit('${t.id}','${L.id}',${xi},this.innerText.trim())">${esc(x.t)}</span>
                 ${session?`<button class="no-print" onclick="deleteLectOpinion('${t.id}','${L.id}',${xi})" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:.75rem;padding:0 2px;line-height:1;flex-shrink:0" title="삭제">✕</button>`:''}
               </li>`).join('')
@@ -2652,10 +2652,10 @@ function vReport(){
       <div style="margin-top:14px"><div class="rp-sec">듣고 싶은 강의 컨텐츠에 대한 의견</div>
         <div class="rp-needs">
           <b>*듣고 싶은 강의 컨텐츠</b><br>
-          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
+          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" spellcheck="false" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
             onblur="saveReportNeeds('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.needs!=null)?esc(t.reportOpinions.needs).replace(/\n/g,'<br>'):(needs.length?': '+needs.map(n=>esc(n)).join(', '):': 특이사항 없음')}</span>
           <br><b>*기타 의견</b><br>
-          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
+          <span class="editable-opinion no-print-border" contenteditable="${session?'true':'false'}" spellcheck="false" style="outline:none;display:inline-block;min-width:100px;${session?'border-bottom:1px dashed #aaa;cursor:text;':''}"
             onblur="saveReportEtcOpinion('${t.id}',this.innerText.trim())">${(t.reportOpinions&&t.reportOpinions.etc!=null)?esc(t.reportOpinions.etc).replace(/\n/g,'<br>'):(etcs.length?': '+etcs.map(e=>esc(e)).join('<br>: '):': 없음')}</span>
         </div>
       </div>
@@ -2688,7 +2688,7 @@ function vReport(){
   <!-- 기타 보고 사항 -->
   <div style="margin-top:14px;border-top:2px solid #0e5a34;padding-top:10px">
     <div class="rp-sec">기타 보고 사항</div>
-    <div contenteditable="${session?'true':'false'}"
+    <div contenteditable="${session?'true':'false'}" spellcheck="false"
       id="rpEtc"
       style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.78rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
       onblur="const tr=byId(DB.trainings,RPQ);if(tr){tr.reportEtc=this.innerText.trim();save();sbPatch('trainings',RPQ,{report_etc:tr.reportEtc});}">
@@ -3263,7 +3263,7 @@ function renderAgendaDoc(t){
   <div class="ag-title">${esc(t.name)} 집합교육 진행안(案)</div>
 
   <!-- 헤드 메시지 (편집 가능) -->
-  <div class="ag-head" contenteditable="${session?'true':'false'}"
+  <div class="ag-head" contenteditable="${session?'true':'false'}" spellcheck="false"
     id="agHead" style="outline:none;${session?'border:1.5px dashed #0e5a34;':''}"
     onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaHead=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_head:tr.agendaHead});}">
     ${esc(headMsg)}
@@ -3342,7 +3342,7 @@ function renderAgendaDoc(t){
   <!-- 기타 보고 사항 -->
   <div style="margin-top:16px;border-top:2px solid #0e5a34;padding-top:10px">
     <div style="font-weight:800;font-size:.85rem;color:#0e5a34;margin-bottom:6px">기타 보고 사항</div>
-    <div contenteditable="${session?'true':'false'}"
+    <div contenteditable="${session?'true':'false'}" spellcheck="false"
       id="agEtc"
       style="min-height:80px;border:${session?'1.5px dashed #0e5a34':'1px solid #e4e7e2'};border-radius:6px;padding:8px 10px;font-size:.82rem;color:#333;line-height:1.7;outline:none;cursor:${session?'text':'default'};white-space:pre-wrap"
       onblur="const tr=byId(DB.trainings,AQ);if(tr){tr.agendaEtc=this.innerText.trim();save();sbPatch('trainings',AQ,{agenda_etc:tr.agendaEtc});}">
@@ -3503,7 +3503,7 @@ function vFeedback(){
   const goodRows=fb.goods.map((g,gi)=>`
     <tr>
       <td style="padding:6px 8px;vertical-align:top">
-        <span contenteditable="true" style="outline:none;border-bottom:1px dashed #aaa;display:inline-block;min-width:80px"
+        <span contenteditable="true" spellcheck="false" style="outline:none;border-bottom:1px dashed #aaa;display:inline-block;min-width:80px"
           onblur="editFBOpinion('${FBQ}','${selInstr}','goods',${gi},this.innerText)">${esc(g)}</span>
       </td>
       <td style="padding:6px 8px;text-align:center;vertical-align:top">
@@ -3515,7 +3515,7 @@ function vFeedback(){
   const impRows=fb.imps.map((g,gi)=>`
     <tr>
       <td style="padding:6px 8px;vertical-align:top">
-        <span contenteditable="true" style="outline:none;border-bottom:1px dashed #aaa;display:inline-block;min-width:80px"
+        <span contenteditable="true" spellcheck="false" style="outline:none;border-bottom:1px dashed #aaa;display:inline-block;min-width:80px"
           onblur="editFBOpinion('${FBQ}','${selInstr}','imps',${gi},this.innerText)">${esc(g)}</span>
       </td>
       <td style="padding:6px 8px;text-align:center;vertical-align:top">
