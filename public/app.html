@@ -6358,9 +6358,9 @@ async function renderSurvey(tid){
      <textarea class="input" rows="2" oninput="SV.lect['${L.id}'].improve=this.value">${esc(v.improve)}</textarea>
     </div>`;}).join('')}
    <div class="sv-card"><div class="sv-section">과정 전체 설문</div>
-    <div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
+    ${(SV.lectures||surveyLectures(t)).length>1?`<div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
     ${(SV.lectures||surveyLectures(t)).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog();document.querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">
-      <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}
+      <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}`:''}
     <div class="sv-q">${esc(t.name)}에서 추가로 필요한(듣고 싶은) 강의 콘텐츠는 무엇인가요?</div>
     <textarea class="input" rows="2" oninput="SV.need=this.value">${esc(SV.need)}</textarea>
     <div class="sv-q">기타 교육관련 의견이 있으시면 자유롭게 기입하여 주세요.</div>
@@ -6388,12 +6388,13 @@ function setLik(path,n){
   prog();
 }
 function prog(){
-  const need=[...Object.values(SV.lect).flatMap(v=>[v.expert,v.practical]),SV.recommendLecture?1:0];
+  // 평가할 강의가 1개뿐이면 추천 강의 문항이 없으므로 진행률에서도 제외
+  const need=[...Object.values(SV.lect).flatMap(v=>[v.expert,v.practical]),...((SV.lectures||[]).length>1?[SV.recommendLecture?1:0]:[])];
   const el=$('#svProg');if(el)el.style.width=Math.round(need.filter(Boolean).length/need.length*100)+'%';
 }
 async function submitSurvey(){
   if(Object.values(SV.lect).some(v=>!v.expert||!v.practical)){toast('모든 강의의 필수 평가를 선택해주세요');return;}
-  if(!SV.recommendLecture){toast('추천하고 싶은 강의를 1개 선택해주세요');return;}
+  if((SV.lectures||[]).length>1&&!SV.recommendLecture){toast('추천하고 싶은 강의를 1개 선택해주세요');return;}
   const resp={id:'r'+Date.now(),trainingId:SV.tid,at:new Date().toISOString(),
     lect:SV.lect,recommendLecture:SV.recommendLecture,need:SV.need.trim(),etc:SV.etc.trim()};
   // localStorage 저장
