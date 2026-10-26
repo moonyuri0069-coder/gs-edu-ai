@@ -362,6 +362,173 @@ table.ep-table{table-layout:fixed;border-collapse:separate;border-spacing:0;widt
 
 
 <script>
+/* ═══════════ 구글 시트 백엔드 연결 (Supabase 대체, 2026-10-26) ═══════════
+   Supabase가 데이터 전송량 한도 초과로 막혀서, 데이터를 구글 시트(Apps Script 웹 앱)로 옮김.
+   앱 곳곳에 있는 기존 Supabase 호출(fetch)을 하나하나 고치지 않고, 여기서 가로채
+   같은 의미의 구글 시트 요청으로 바꿔준다. (읽기/저장/수정/삭제/로그인 모두)
+   - 로그인한 담당자: 30초마다 "바뀐 행만" 한 번에 받아와 메모리에 보관(GS_MIRROR) → 전송량 최소화
+   - 설문·출석 화면(로그인 없음): 필요한 교육/강사 정보만 그때그때 조회
+   - 사진: 시트에는 파일 이름만 저장하고, 실제 이미지는 구글 드라이브 폴더에 보관.
+     화면에 보일 때만 한 장씩 받아와 이 탭에서 기억(PHOTO_CACHE). */
+const GS_API='https://script.google.com/macros/s/AKfycbyPEGrBV2Z_VIpOw05diKAAw6uMVLE_4LNvAPu2ab8HdbNOvIvA5D2-7l3p8PuZFozc/exec';
+const SB_BASE='https://eldpjvlefuhyfacrmwsl.supabase.co';
+const _nativeFetch=window.fetch.bind(window);
+const GS_KEYS={deleted_ids:['kind','item_id']};
+const gsKey=(t,r)=>(GS_KEYS[t]||['id']).map(k=>String(r[k]??'')).join('\u0001');
+const gsToken=()=>{const t=sessionStorage.getItem('gs_edu_token')||'';return t.split('.').length===3?'':t;}; // 예전 Supabase 토큰(JWT)은 무시
+
+async function gsCall(body){
+  const tok=gsToken();
+  if(tok&&!body.token)body.token=tok;
+  const r=await _nativeFetch(GS_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+  const j=await r.json();
+  if(!j.ok&&j.error==='login_required'&&sessionStorage.getItem('gs_edu_login')==='1'){
+    // 로그인이 만료됐거나 예전(Supabase) 로그인 상태 → 다시 로그인하게 함
+    sessionStorage.removeItem('gs_edu_login');sessionStorage.removeItem('gs_edu_token');
+    try{session=false;toast('로그인이 만료되었습니다. 다시 로그인해 주세요');render();}catch(e){}
+  }
+  return j;
+}
+
+// 로그인한 담당자용: 전체 표를 메모리에 두고, 이후엔 바뀐 행만 받아와 갱신
+const GS_MIRROR={time:0,at:0,tables:{},pending:null,ready:false};
+function gsPull(){
+  if(GS_MIRROR.pending)return GS_MIRROR.pending;
+  if(GS_MIRROR.ready&&Date.now()-GS_MIRROR.at<5000)return Promise.resolve(); // 한 번의 동기화 안에서 여러 표를 읽을 때 요청은 1번만
+  GS_MIRROR.pending=(async()=>{
+    const j=await gsCall({op:'pull',since:GS_MIRROR.time,withIds:true});
+    if(!j.ok)throw new Error(j.error||'pull_failed');
+    Object.keys(j.data).forEach(t=>{
+      const m=GS_MIRROR.tables[t]||(GS_MIRROR.tables[t]=new Map());
+      j.data[t].forEach(r=>m.set(gsKey(t,r),r));
+      if(j.ids&&j.ids[t]){const ids=new Set(j.ids[t]);[...m.keys()].forEach(k=>{if(!ids.has(k))m.delete(k);});}
+    });
+    GS_MIRROR.time=j.time;GS_MIRROR.at=Date.now();GS_MIRROR.ready=true;
+  })().finally(()=>{GS_MIRROR.pending=null;});
+  return GS_MIRROR.pending;
+}
+const gsDirty=()=>{GS_MIRROR.at=0;}; // 저장/삭제 직후엔 다음 읽기에서 바로 새로 받아오게
+
+// ── 사진 ──
+const PHOTO_CACHE=new Map();const PHOTO_LOADING=new Set();
+const BLANK_IMG='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+function photoSrc(v){
+  if(!v)return BLANK_IMG;
+  if(String(v).startsWith('data:'))return v;
+  if(PHOTO_CACHE.has(v))return PHOTO_CACHE.get(v);
+  loadPhoto(v);return BLANK_IMG;
+}
+async function loadPhoto(name){
+  if(PHOTO_LOADING.has(name))return;PHOTO_LOADING.add(name);
+  try{
+    const j=await gsCall({op:'photo',name});
+    if(j.ok){
+      PHOTO_CACHE.set(name,j.dataUrl);
+      document.querySelectorAll('img[data-photo]').forEach(img=>{if(img.dataset.photo===name)img.src=j.dataUrl;});
+    }
+  }catch(e){console.warn('사진 불러오기 실패',name,e);}
+  finally{PHOTO_LOADING.delete(name);}
+}
+// <img>에 쓰는 속성: 아직 안 받아온 사진은 받아오는 대로 자동으로 채워짐
+const photoAttr=v=>`src="${photoSrc(v)}"${v&&!String(v).startsWith('data:')?` data-photo="${esc(v)}"`:''}`;
+async function gsPhotoName(dataUrl){
+  const mime=(dataUrl.match(/^data:([^;]+);/)||[])[1]||'image/jpeg';
+  const ext=(mime.split('/')[1]||'jpg').replace('jpeg','jpg').replace('svg+xml','svg');
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(dataUrl));
+  return 'h'+[...new Uint8Array(buf)].slice(0,12).map(b=>b.toString(16).padStart(2,'0')).join('')+'.'+ext;
+}
+// 저장 전에 data:image 사진을 드라이브에 올리고 파일 이름으로 바꿈 (같은 사진은 한 번만 올라감)
+async function gsStorePhotos(row){
+  const conv=async v=>{
+    if(typeof v!=='string'||!v.startsWith('data:image/'))return v;
+    const name=await gsPhotoName(v);
+    if(!PHOTO_CACHE.has(name)){
+      const j=await gsCall({op:'savePhoto',name,dataUrl:v});
+      if(!j.ok)throw new Error('사진 저장 실패: '+j.error);
+      PHOTO_CACHE.set(name,v);
+    }
+    // 이 브라우저의 데이터에서도 이름으로 바꿔둠 → 저장 공간 절약, 다음 저장 때 다시 안 올림
+    (DB.trainings||[]).forEach(t=>{
+      if(Array.isArray(t.photos))t.photos=t.photos.map(p=>p===v?name:p);
+      if(t.connectingDayImg===v)t.connectingDayImg=name;
+    });
+    return name;
+  };
+  if(Array.isArray(row.photos))row.photos=await Promise.all(row.photos.map(conv));
+  if('connecting_day_img' in row)row.connecting_day_img=await conv(row.connecting_day_img);
+  try{save();}catch(e){}
+}
+
+// ── 기존 Supabase 호출을 구글 시트 요청으로 바꿔주는 부분 ──
+const gsResp=(status,obj)=>new Response(obj===undefined?null:JSON.stringify(obj),{status,headers:{'Content-Type':'application/json'}});
+async function gsHandle(url,opts){
+  const u=new URL(url);const method=(opts.method||'GET').toUpperCase();
+  let headers=opts.headers||{};if(headers instanceof Headers)headers=Object.fromEntries(headers.entries());
+  const prefer=headers.Prefer||headers.prefer||'';
+  // 로그인
+  if(u.pathname.startsWith('/auth/v1/token')){
+    const b=JSON.parse(opts.body||'{}');
+    const j=await gsCall({op:'login',email:b.email,password:b.password});
+    if(j.ok){GS_MIRROR.time=0;GS_MIRROR.ready=false;GS_MIRROR.tables={};return gsResp(200,{access_token:j.token});}
+    return gsResp(400,{error:j.error});
+  }
+  const table=u.pathname.replace('/rest/v1/','').replace(/\/$/,'');
+  const where={};let order=null,limit=null;
+  u.searchParams.forEach((v,k)=>{
+    if(k==='select')return;
+    if(k==='order'){order=v;return;}
+    if(k==='limit'){limit=Number(v);return;}
+    if(v.startsWith('eq.'))where[k]=v.slice(3);
+  });
+  if(method==='GET'){
+    let rows;
+    if(gsToken()){
+      try{await gsPull();}catch(e){return gsResp(503,{error:String(e.message||e)});}
+      const m=GS_MIRROR.tables[table];
+      if(!m)return gsResp(404,{error:'unknown_table'});
+      rows=[...m.values()].filter(r=>Object.keys(where).every(k=>String(r[k]??'')===String(where[k])));
+      rows=JSON.parse(JSON.stringify(rows));
+    }else{
+      const j=await gsCall({op:'select',table,where});
+      if(!j.ok)return gsResp(j.error==='login_required'?401:400,{error:j.error});
+      rows=j.rows;
+    }
+    if(order){
+      const [col,dir]=order.split('.');const s=dir==='desc'?-1:1;
+      rows.sort((a,b)=>{const x=a[col]??'',y=b[col]??'';return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y)))*s;});
+    }
+    if(limit)rows=rows.slice(0,limit);
+    return gsResp(200,rows);
+  }
+  if(method==='POST'||method==='PATCH'){
+    let body=JSON.parse(opts.body||'null');
+    let rows=Array.isArray(body)?body:[body];
+    if(method==='PATCH'){
+      if(!where.id)return gsResp(400,{error:'patch_needs_id'});
+      rows=[Object.assign({},body,{id:where.id})];
+    }
+    if(table==='trainings'){for(const r of rows)await gsStorePhotos(r);}
+    const insertOnly=method==='POST'&&!/merge-duplicates/.test(prefer); // 그냥 추가(POST)는 이미 있으면 충돌(409) — Supabase와 동일
+    const j=await gsCall({op:'upsert',table,rows,insertOnly});
+    gsDirty();
+    if(!j.ok)return gsResp(j.error==='login_required'?401:400,{error:j.error,message:j.error});
+    if(insertOnly&&j.skipped)return gsResp(409,{error:'duplicate'});
+    return gsResp(method==='POST'?201:204);
+  }
+  if(method==='DELETE'){
+    const j=await gsCall({op:'delete',table,where});
+    gsDirty();
+    if(!j.ok)return gsResp(j.error==='login_required'?401:400,{error:j.error});
+    return gsResp(204);
+  }
+  return gsResp(405,{error:'method'});
+}
+window.fetch=function(input,opts){
+  const url=typeof input==='string'?input:(input&&input.url)||'';
+  if(url.startsWith(SB_BASE))return gsHandle(url,opts||{});
+  return _nativeFetch(input,opts);
+};
+
 /* ═══════════ 데이터 계층 ═══════════ */
 const LS_KEY='gs_edu_ai_v2';
 const TYPES=['OFC','개점지원담당','인턴사원','점포영업담당','부점장','점장','개발담당','기타'];
@@ -2621,7 +2788,7 @@ function vReport(){
           const ph=(t.photos||[])[pi];
           return ph
             ? `<div style="position:relative;aspect-ratio:4/3">
-                <img src="${ph}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">
+                <img ${photoAttr(ph)} style="width:100%;height:100%;object-fit:cover;border-radius:8px">
                 ${session?`<button class="no-print" onclick="removePhoto('${t.id}',${pi})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center">✕</button>`:''}
               </div>`
             : session
@@ -3229,7 +3396,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
   const connectImg=t.connectingDayImg||'';
   return `<div style="width:100%;height:100%;background:#111;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">
     ${connectImg
-      ? `<img src="${connectImg}" style="max-width:100%;max-height:100%;object-fit:contain">`
+      ? `<img ${photoAttr(connectImg)} style="max-width:100%;max-height:100%;object-fit:contain">`
       : `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff">
           <div style="font-size:2rem">🖼️</div>
           <div style="font-size:1.4rem;font-weight:700">커넥팅데이 장소안내</div>
