@@ -2395,9 +2395,7 @@ function vCourseDash(t){
   // lstats: 첫/마지막 제외 + 동일강사 중복 제거
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
-    if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
-    if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
-    if(L.title&&L.title.includes('가치공유'))return false; // 가치공유 제외
+    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외 (예전 첫/마지막·점심·가치공유 자동 제외는 설문 쪽에서 없앴는데 여기 남아 있어서, 첫 강의 의견이 결과보고서·과정 Dashboard에 안 나왔음)
     const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
@@ -2680,9 +2678,7 @@ function vReport(){
   // lstats: 첫/마지막 제외 + 동일강사 중복 제거
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
-    if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
-    if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
-    if(L.title&&L.title.includes('가치공유'))return false; // 가치공유 제외
+    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외 (예전 첫/마지막·점심·가치공유 자동 제외는 설문 쪽에서 없앴는데 여기 남아 있어서, 첫 강의 의견이 결과보고서·과정 Dashboard에 안 나왔음)
     const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
@@ -3004,7 +3000,7 @@ async function printReport(){
   toast('🤖 AI가 의견을 정제 중...');
   Object.keys(_opinionCache).forEach(k=>delete _opinionCache[k]);
   const rs=respOf(RPQ);
-  const lstats2=t.lectures.filter((L,i,arr)=>!(i===0||i===arr.length-1)&&!(L.title&&L.title.includes('점심식사'))&&!(L.title&&L.title.includes('가치공유')));
+  const lstats2=t.lectures.filter(lectSurveyOn); // 설문과 같은 기준
   for(const L of lstats2){await lectOpinionsAI(L,rs);}
   // 새창으로 열어 브라우저 인쇄 - 표 중간 잘림 없음
   const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
@@ -3597,9 +3593,7 @@ function vFeedback(){
 
   // 강사 목록 (해당 교육 강의에서 추출, 제외 강의·테스트/설문제외 과목 빼고 — 설문 응답 자체가 없음)
   const fbLects=t?t.lectures.filter((L,i,arr)=>{
-    if(i===0||i===arr.length-1)return false;
-    if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
-    if(!lectSurveyOn(L))return false;
+    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외
     return true;
   }):[];
   // 강사 중복 제거 (강사피드백은 강의 단위가 아니라 강사 단위로 묶어서 보여주는 화면이라
@@ -3788,9 +3782,7 @@ function vFeedback(){
    ※ 대상 강사/강의 필터는 vFeedback()의 fbLects·instrList와 같은 기준(첫·마지막 강의 제외, 점심/가치공유 제외, 설문 꺼진 강의 제외) */
 function fbTargets(t){
   const fbLects=(t?.lectures||[]).filter((L,i,arr)=>{
-    if(i===0||i===arr.length-1)return false;
-    if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
-    if(!lectSurveyOn(L))return false;
+    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외
     return true;
   });
   const seen=new Set();
@@ -6559,7 +6551,17 @@ function prog(){
   const need=[...Object.values(SV.lect).flatMap(v=>[v.expert,v.practical]),...((SV.lectures||[]).length>1?[SV.recommendLecture?1:0]:[])];
   const el=$('#svProg');if(el)el.style.width=Math.round(need.filter(Boolean).length/need.length*100)+'%';
 }
+// 제출 버튼을 여러 번 눌러도 1건만 저장되도록 (구글 시트 저장은 1~3초 걸려서, 기다리다 한 번 더 누르면 2건이 등록됐음)
+let SV_SUBMITTING=false;
 async function submitSurvey(){
+  if(SV_SUBMITTING)return;
+  SV_SUBMITTING=true;
+  const btn=document.querySelector('button[onclick="submitSurvey()"]');const label=btn&&btn.textContent;
+  if(btn){btn.disabled=true;btn.textContent='제출 중...';}
+  try{await _submitSurvey();}
+  finally{SV_SUBMITTING=false;if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=label;}}
+}
+async function _submitSurvey(){
   if(Object.values(SV.lect).some(v=>!v.expert||!v.practical)){toast('모든 강의의 필수 평가를 선택해주세요');return;}
   if((SV.lectures||[]).length>1&&!SV.recommendLecture){toast('추천하고 싶은 강의를 1개 선택해주세요');return;}
   const resp={id:'r'+Date.now(),trainingId:SV.tid,at:new Date().toISOString(),
@@ -6636,7 +6638,17 @@ async function renderAttend(tid){
    <p style="text-align:center;font-size:.75rem;color:var(--ink4);margin-top:12px">제출하면 출석이 인정됩니다</p>
   </div>`;
 }
+// 출석 등록 버튼 여러 번 눌림 방지 (같은 사번은 서버에서도 1건만 저장됨)
+let AT_SUBMITTING=false;
 async function submitAttend(tid){
+  if(AT_SUBMITTING)return;
+  AT_SUBMITTING=true;
+  const btn=document.querySelector(`button[onclick="submitAttend('${tid}')"]`);const label=btn&&btn.textContent;
+  if(btn){btn.disabled=true;btn.textContent='등록 중...';}
+  try{await _submitAttend(tid);}
+  finally{AT_SUBMITTING=false;if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=label;}}
+}
+async function _submitAttend(tid){
   const empNo=$('#atEmpNo').value.trim();
   const name=$('#atName').value.trim();
   if(!empNo||!name){toast('사번과 성명을 모두 입력해 주세요');return;}
