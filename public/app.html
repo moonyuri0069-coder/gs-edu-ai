@@ -224,10 +224,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 .rp-page-break::after{content:'- 1/2 -';position:absolute;right:0;top:-10px;font-size:.72rem;color:#aaa;background:#fff;padding:0 6px}
 .rp-two{display:grid;grid-template-columns:1.15fr .85fr;gap:12px}
 .rp-sec{font-size:.78rem;font-weight:800;color:#0e5a34;border-bottom:1.5px solid #0e5a34;padding-bottom:3px;margin-bottom:6px}
-.rp-opinion-table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed} /* 교육명 칸 너비 고정(130px) — 긴 강의명 때문에 의견 칸이 좁아지지 않게 */
+.rp-opinion-table{width:100%;border-collapse:collapse;font-size:.72rem}
 .rp-opinion-table th{background:#0e5a34;color:#fff;padding:4px 6px;font-weight:700}
 .rp-opinion-table td{padding:4px 6px;border:1px solid #e4e7e2;vertical-align:top;line-height:1.4}
-.rp-opinion-table td.lname{font-weight:700;color:#0e5a34;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;font-size:.72rem;text-align:center}
+.rp-opinion-table td.lname{font-weight:700;color:#0e5a34;white-space:nowrap;font-size:.72rem;text-align:center}
 .rp-opinion-table ul{margin:0;padding-left:14px}
 .rp-opinion-table li{margin-bottom:2px}
 .rp-opinion-table li.hi{color:#0e5a34;font-weight:700}
@@ -362,173 +362,6 @@ table.ep-table{table-layout:fixed;border-collapse:separate;border-spacing:0;widt
 
 
 <script>
-/* ═══════════ 구글 시트 백엔드 연결 (Supabase 대체, 2026-10-26) ═══════════
-   Supabase가 데이터 전송량 한도 초과로 막혀서, 데이터를 구글 시트(Apps Script 웹 앱)로 옮김.
-   앱 곳곳에 있는 기존 Supabase 호출(fetch)을 하나하나 고치지 않고, 여기서 가로채
-   같은 의미의 구글 시트 요청으로 바꿔준다. (읽기/저장/수정/삭제/로그인 모두)
-   - 로그인한 담당자: 30초마다 "바뀐 행만" 한 번에 받아와 메모리에 보관(GS_MIRROR) → 전송량 최소화
-   - 설문·출석 화면(로그인 없음): 필요한 교육/강사 정보만 그때그때 조회
-   - 사진: 시트에는 파일 이름만 저장하고, 실제 이미지는 구글 드라이브 폴더에 보관.
-     화면에 보일 때만 한 장씩 받아와 이 탭에서 기억(PHOTO_CACHE). */
-const GS_API='https://script.google.com/macros/s/AKfycbyPEGrBV2Z_VIpOw05diKAAw6uMVLE_4LNvAPu2ab8HdbNOvIvA5D2-7l3p8PuZFozc/exec';
-const SB_BASE='https://eldpjvlefuhyfacrmwsl.supabase.co';
-const _nativeFetch=window.fetch.bind(window);
-const GS_KEYS={deleted_ids:['kind','item_id']};
-const gsKey=(t,r)=>(GS_KEYS[t]||['id']).map(k=>String(r[k]??'')).join('\u0001');
-const gsToken=()=>{const t=sessionStorage.getItem('gs_edu_token')||'';return t.split('.').length===3?'':t;}; // 예전 Supabase 토큰(JWT)은 무시
-
-async function gsCall(body){
-  const tok=gsToken();
-  if(tok&&!body.token)body.token=tok;
-  const r=await _nativeFetch(GS_API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
-  const j=await r.json();
-  if(!j.ok&&j.error==='login_required'&&sessionStorage.getItem('gs_edu_login')==='1'){
-    // 로그인이 만료됐거나 예전(Supabase) 로그인 상태 → 다시 로그인하게 함
-    sessionStorage.removeItem('gs_edu_login');sessionStorage.removeItem('gs_edu_token');
-    try{session=false;toast('로그인이 만료되었습니다. 다시 로그인해 주세요');render();}catch(e){}
-  }
-  return j;
-}
-
-// 로그인한 담당자용: 전체 표를 메모리에 두고, 이후엔 바뀐 행만 받아와 갱신
-const GS_MIRROR={time:0,at:0,tables:{},pending:null,ready:false};
-function gsPull(){
-  if(GS_MIRROR.pending)return GS_MIRROR.pending;
-  if(GS_MIRROR.ready&&Date.now()-GS_MIRROR.at<5000)return Promise.resolve(); // 한 번의 동기화 안에서 여러 표를 읽을 때 요청은 1번만
-  GS_MIRROR.pending=(async()=>{
-    const j=await gsCall({op:'pull',since:GS_MIRROR.time,withIds:true});
-    if(!j.ok)throw new Error(j.error||'pull_failed');
-    Object.keys(j.data).forEach(t=>{
-      const m=GS_MIRROR.tables[t]||(GS_MIRROR.tables[t]=new Map());
-      j.data[t].forEach(r=>m.set(gsKey(t,r),r));
-      if(j.ids&&j.ids[t]){const ids=new Set(j.ids[t]);[...m.keys()].forEach(k=>{if(!ids.has(k))m.delete(k);});}
-    });
-    GS_MIRROR.time=j.time;GS_MIRROR.at=Date.now();GS_MIRROR.ready=true;
-  })().finally(()=>{GS_MIRROR.pending=null;});
-  return GS_MIRROR.pending;
-}
-const gsDirty=()=>{GS_MIRROR.at=0;}; // 저장/삭제 직후엔 다음 읽기에서 바로 새로 받아오게
-
-// ── 사진 ──
-const PHOTO_CACHE=new Map();const PHOTO_LOADING=new Set();
-const BLANK_IMG='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-function photoSrc(v){
-  if(!v)return BLANK_IMG;
-  if(String(v).startsWith('data:'))return v;
-  if(PHOTO_CACHE.has(v))return PHOTO_CACHE.get(v);
-  loadPhoto(v);return BLANK_IMG;
-}
-async function loadPhoto(name){
-  if(PHOTO_LOADING.has(name))return;PHOTO_LOADING.add(name);
-  try{
-    const j=await gsCall({op:'photo',name});
-    if(j.ok){
-      PHOTO_CACHE.set(name,j.dataUrl);
-      document.querySelectorAll('img[data-photo]').forEach(img=>{if(img.dataset.photo===name)img.src=j.dataUrl;});
-    }
-  }catch(e){console.warn('사진 불러오기 실패',name,e);}
-  finally{PHOTO_LOADING.delete(name);}
-}
-// <img>에 쓰는 속성: 아직 안 받아온 사진은 받아오는 대로 자동으로 채워짐
-const photoAttr=v=>`src="${photoSrc(v)}"${v&&!String(v).startsWith('data:')?` data-photo="${esc(v)}"`:''}`;
-async function gsPhotoName(dataUrl){
-  const mime=(dataUrl.match(/^data:([^;]+);/)||[])[1]||'image/jpeg';
-  const ext=(mime.split('/')[1]||'jpg').replace('jpeg','jpg').replace('svg+xml','svg');
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(dataUrl));
-  return 'h'+[...new Uint8Array(buf)].slice(0,12).map(b=>b.toString(16).padStart(2,'0')).join('')+'.'+ext;
-}
-// 저장 전에 data:image 사진을 드라이브에 올리고 파일 이름으로 바꿈 (같은 사진은 한 번만 올라감)
-async function gsStorePhotos(row){
-  const conv=async v=>{
-    if(typeof v!=='string'||!v.startsWith('data:image/'))return v;
-    const name=await gsPhotoName(v);
-    if(!PHOTO_CACHE.has(name)){
-      const j=await gsCall({op:'savePhoto',name,dataUrl:v});
-      if(!j.ok)throw new Error('사진 저장 실패: '+j.error);
-      PHOTO_CACHE.set(name,v);
-    }
-    // 이 브라우저의 데이터에서도 이름으로 바꿔둠 → 저장 공간 절약, 다음 저장 때 다시 안 올림
-    (DB.trainings||[]).forEach(t=>{
-      if(Array.isArray(t.photos))t.photos=t.photos.map(p=>p===v?name:p);
-      if(t.connectingDayImg===v)t.connectingDayImg=name;
-    });
-    return name;
-  };
-  if(Array.isArray(row.photos))row.photos=await Promise.all(row.photos.map(conv));
-  if('connecting_day_img' in row)row.connecting_day_img=await conv(row.connecting_day_img);
-  try{save();}catch(e){}
-}
-
-// ── 기존 Supabase 호출을 구글 시트 요청으로 바꿔주는 부분 ──
-const gsResp=(status,obj)=>new Response(obj===undefined?null:JSON.stringify(obj),{status,headers:{'Content-Type':'application/json'}});
-async function gsHandle(url,opts){
-  const u=new URL(url);const method=(opts.method||'GET').toUpperCase();
-  let headers=opts.headers||{};if(headers instanceof Headers)headers=Object.fromEntries(headers.entries());
-  const prefer=headers.Prefer||headers.prefer||'';
-  // 로그인
-  if(u.pathname.startsWith('/auth/v1/token')){
-    const b=JSON.parse(opts.body||'{}');
-    const j=await gsCall({op:'login',email:b.email,password:b.password});
-    if(j.ok){GS_MIRROR.time=0;GS_MIRROR.ready=false;GS_MIRROR.tables={};return gsResp(200,{access_token:j.token});}
-    return gsResp(400,{error:j.error});
-  }
-  const table=u.pathname.replace('/rest/v1/','').replace(/\/$/,'');
-  const where={};let order=null,limit=null;
-  u.searchParams.forEach((v,k)=>{
-    if(k==='select')return;
-    if(k==='order'){order=v;return;}
-    if(k==='limit'){limit=Number(v);return;}
-    if(v.startsWith('eq.'))where[k]=v.slice(3);
-  });
-  if(method==='GET'){
-    let rows;
-    if(gsToken()){
-      try{await gsPull();}catch(e){return gsResp(503,{error:String(e.message||e)});}
-      const m=GS_MIRROR.tables[table];
-      if(!m)return gsResp(404,{error:'unknown_table'});
-      rows=[...m.values()].filter(r=>Object.keys(where).every(k=>String(r[k]??'')===String(where[k])));
-      rows=JSON.parse(JSON.stringify(rows));
-    }else{
-      const j=await gsCall({op:'select',table,where});
-      if(!j.ok)return gsResp(j.error==='login_required'?401:400,{error:j.error});
-      rows=j.rows;
-    }
-    if(order){
-      const [col,dir]=order.split('.');const s=dir==='desc'?-1:1;
-      rows.sort((a,b)=>{const x=a[col]??'',y=b[col]??'';return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y)))*s;});
-    }
-    if(limit)rows=rows.slice(0,limit);
-    return gsResp(200,rows);
-  }
-  if(method==='POST'||method==='PATCH'){
-    let body=JSON.parse(opts.body||'null');
-    let rows=Array.isArray(body)?body:[body];
-    if(method==='PATCH'){
-      if(!where.id)return gsResp(400,{error:'patch_needs_id'});
-      rows=[Object.assign({},body,{id:where.id})];
-    }
-    if(table==='trainings'){for(const r of rows)await gsStorePhotos(r);}
-    const insertOnly=method==='POST'&&!/merge-duplicates/.test(prefer); // 그냥 추가(POST)는 이미 있으면 충돌(409) — Supabase와 동일
-    const j=await gsCall({op:'upsert',table,rows,insertOnly});
-    gsDirty();
-    if(!j.ok)return gsResp(j.error==='login_required'?401:400,{error:j.error,message:j.error});
-    if(insertOnly&&j.skipped)return gsResp(409,{error:'duplicate'});
-    return gsResp(method==='POST'?201:204);
-  }
-  if(method==='DELETE'){
-    const j=await gsCall({op:'delete',table,where});
-    gsDirty();
-    if(!j.ok)return gsResp(j.error==='login_required'?401:400,{error:j.error});
-    return gsResp(204);
-  }
-  return gsResp(405,{error:'method'});
-}
-window.fetch=function(input,opts){
-  const url=typeof input==='string'?input:(input&&input.url)||'';
-  if(url.startsWith(SB_BASE))return gsHandle(url,opts||{});
-  return _nativeFetch(input,opts);
-};
-
 /* ═══════════ 데이터 계층 ═══════════ */
 const LS_KEY='gs_edu_ai_v2';
 const TYPES=['OFC','개점지원담당','인턴사원','점포영업담당','부점장','점장','개발담당','기타'];
@@ -2395,7 +2228,9 @@ function vCourseDash(t){
   // lstats: 첫/마지막 제외 + 동일강사 중복 제거
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
-    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외 (예전 첫/마지막·점심·가치공유 자동 제외는 설문 쪽에서 없앴는데 여기 남아 있어서, 첫 강의 의견이 결과보고서·과정 Dashboard에 안 나왔음)
+    if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
+    if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
+    if(L.title&&L.title.includes('가치공유'))return false; // 가치공유 제외
     const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
@@ -2678,7 +2513,9 @@ function vReport(){
   // lstats: 첫/마지막 제외 + 동일강사 중복 제거
   const _seenL=new Set();
   const lstats=t.lectures.filter((L,i,arr)=>{
-    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외 (예전 첫/마지막·점심·가치공유 자동 제외는 설문 쪽에서 없앴는데 여기 남아 있어서, 첫 강의 의견이 결과보고서·과정 Dashboard에 안 나왔음)
+    if(i===0||i===arr.length-1)return false; // 첫/마지막 제외
+    if(L.title&&L.title.includes('점심식사'))return false; // 점심식사 제외
+    if(L.title&&L.title.includes('가치공유'))return false; // 가치공유 제외
     const k=(L.instructorId||L.instructorName||'')+'||'+(L.title||'');
     if(k&&_seenL.has(k))return false;
     if(k)_seenL.add(k);
@@ -2784,7 +2621,7 @@ function vReport(){
           const ph=(t.photos||[])[pi];
           return ph
             ? `<div style="position:relative;aspect-ratio:4/3">
-                <img ${photoAttr(ph)} style="width:100%;height:100%;object-fit:cover;border-radius:8px">
+                <img src="${ph}" style="width:100%;height:100%;object-fit:cover;border-radius:8px">
                 ${session?`<button class="no-print" onclick="removePhoto('${t.id}',${pi})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center">✕</button>`:''}
               </div>`
             : session
@@ -3000,7 +2837,7 @@ async function printReport(){
   toast('🤖 AI가 의견을 정제 중...');
   Object.keys(_opinionCache).forEach(k=>delete _opinionCache[k]);
   const rs=respOf(RPQ);
-  const lstats2=t.lectures.filter(lectSurveyOn); // 설문과 같은 기준
+  const lstats2=t.lectures.filter((L,i,arr)=>!(i===0||i===arr.length-1)&&!(L.title&&L.title.includes('점심식사'))&&!(L.title&&L.title.includes('가치공유')));
   for(const L of lstats2){await lectOpinionsAI(L,rs);}
   // 새창으로 열어 브라우저 인쇄 - 표 중간 잘림 없음
   const allStyles=[...document.styleSheets].filter(s=>{try{return s.cssRules}catch(e){return false}})
@@ -3392,7 +3229,7 @@ function renderSlide(idx,t,attendUrl,surveyUrl){
   const connectImg=t.connectingDayImg||'';
   return `<div style="width:100%;height:100%;background:#111;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center">
     ${connectImg
-      ? `<img ${photoAttr(connectImg)} style="max-width:100%;max-height:100%;object-fit:contain">`
+      ? `<img src="${connectImg}" style="max-width:100%;max-height:100%;object-fit:contain">`
       : `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;color:#fff">
           <div style="font-size:2rem">🖼️</div>
           <div style="font-size:1.4rem;font-weight:700">커넥팅데이 장소안내</div>
@@ -3593,7 +3430,9 @@ function vFeedback(){
 
   // 강사 목록 (해당 교육 강의에서 추출, 제외 강의·테스트/설문제외 과목 빼고 — 설문 응답 자체가 없음)
   const fbLects=t?t.lectures.filter((L,i,arr)=>{
-    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외
+    if(i===0||i===arr.length-1)return false;
+    if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
+    if(!lectSurveyOn(L))return false;
     return true;
   }):[];
   // 강사 중복 제거 (강사피드백은 강의 단위가 아니라 강사 단위로 묶어서 보여주는 화면이라
@@ -3782,7 +3621,9 @@ function vFeedback(){
    ※ 대상 강사/강의 필터는 vFeedback()의 fbLects·instrList와 같은 기준(첫·마지막 강의 제외, 점심/가치공유 제외, 설문 꺼진 강의 제외) */
 function fbTargets(t){
   const fbLects=(t?.lectures||[]).filter((L,i,arr)=>{
-    if(!lectSurveyOn(L))return false; // 설문과 같은 기준: '설문제외' 체크한 과목만 제외
+    if(i===0||i===arr.length-1)return false;
+    if(L.title&&(L.title.includes('점심식사')||L.title.includes('가치공유')))return false;
+    if(!lectSurveyOn(L))return false;
     return true;
   });
   const seen=new Set();
@@ -6517,9 +6358,9 @@ async function renderSurvey(tid){
      <textarea class="input" rows="2" oninput="SV.lect['${L.id}'].improve=this.value">${esc(v.improve)}</textarea>
     </div>`;}).join('')}
    <div class="sv-card"><div class="sv-section">과정 전체 설문</div>
-    ${(SV.lectures||surveyLectures(t)).length>1?`<div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
+    <div class="sv-q">추천하고 싶은 강의를 선정하여 주세요. (1개) <span class="req">*</span></div>
     ${(SV.lectures||surveyLectures(t)).map(L=>`<div class="opt ${SV.recommendLecture===L.id?'on':''}" onclick="SV.recommendLecture='${L.id}';prog();document.querySelectorAll('.opt').forEach(o=>o.classList.remove('on'));this.classList.add('on')">
-      <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}`:''}
+      <span>${SV.recommendLecture===L.id?'◉':'○'}</span>${esc(L.title)}</div>`).join('')}
     <div class="sv-q">${esc(t.name)}에서 추가로 필요한(듣고 싶은) 강의 콘텐츠는 무엇인가요?</div>
     <textarea class="input" rows="2" oninput="SV.need=this.value">${esc(SV.need)}</textarea>
     <div class="sv-q">기타 교육관련 의견이 있으시면 자유롭게 기입하여 주세요.</div>
@@ -6547,23 +6388,12 @@ function setLik(path,n){
   prog();
 }
 function prog(){
-  // 평가할 강의가 1개뿐이면 추천 강의 문항이 없으므로 진행률에서도 제외
-  const need=[...Object.values(SV.lect).flatMap(v=>[v.expert,v.practical]),...((SV.lectures||[]).length>1?[SV.recommendLecture?1:0]:[])];
+  const need=[...Object.values(SV.lect).flatMap(v=>[v.expert,v.practical]),SV.recommendLecture?1:0];
   const el=$('#svProg');if(el)el.style.width=Math.round(need.filter(Boolean).length/need.length*100)+'%';
 }
-// 제출 버튼을 여러 번 눌러도 1건만 저장되도록 (구글 시트 저장은 1~3초 걸려서, 기다리다 한 번 더 누르면 2건이 등록됐음)
-let SV_SUBMITTING=false;
 async function submitSurvey(){
-  if(SV_SUBMITTING)return;
-  SV_SUBMITTING=true;
-  const btn=document.querySelector('button[onclick="submitSurvey()"]');const label=btn&&btn.textContent;
-  if(btn){btn.disabled=true;btn.textContent='제출 중...';}
-  try{await _submitSurvey();}
-  finally{SV_SUBMITTING=false;if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=label;}}
-}
-async function _submitSurvey(){
   if(Object.values(SV.lect).some(v=>!v.expert||!v.practical)){toast('모든 강의의 필수 평가를 선택해주세요');return;}
-  if((SV.lectures||[]).length>1&&!SV.recommendLecture){toast('추천하고 싶은 강의를 1개 선택해주세요');return;}
+  if(!SV.recommendLecture){toast('추천하고 싶은 강의를 1개 선택해주세요');return;}
   const resp={id:'r'+Date.now(),trainingId:SV.tid,at:new Date().toISOString(),
     lect:SV.lect,recommendLecture:SV.recommendLecture,need:SV.need.trim(),etc:SV.etc.trim()};
   // localStorage 저장
@@ -6638,17 +6468,7 @@ async function renderAttend(tid){
    <p style="text-align:center;font-size:.75rem;color:var(--ink4);margin-top:12px">제출하면 출석이 인정됩니다</p>
   </div>`;
 }
-// 출석 등록 버튼 여러 번 눌림 방지 (같은 사번은 서버에서도 1건만 저장됨)
-let AT_SUBMITTING=false;
 async function submitAttend(tid){
-  if(AT_SUBMITTING)return;
-  AT_SUBMITTING=true;
-  const btn=document.querySelector(`button[onclick="submitAttend('${tid}')"]`);const label=btn&&btn.textContent;
-  if(btn){btn.disabled=true;btn.textContent='등록 중...';}
-  try{await _submitAttend(tid);}
-  finally{AT_SUBMITTING=false;if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=label;}}
-}
-async function _submitAttend(tid){
   const empNo=$('#atEmpNo').value.trim();
   const name=$('#atName').value.trim();
   if(!empNo||!name){toast('사번과 성명을 모두 입력해 주세요');return;}
