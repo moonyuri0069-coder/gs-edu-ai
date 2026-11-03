@@ -2655,7 +2655,7 @@ function lectOpinions(L,rsArr){
   rs2.forEach(r=>{const v=r.lect[L.id];if(!v)return;
     if(isValidOpinion(v.good))goods.push(v.good.trim());
     if(isValidOpinion(v.improve))imps.push(v.improve.trim());});
-  const uniq=arr=>[...new Set(arr)].slice(0,4);
+  const uniq=arr=>[...new Set(arr)];
   return{goods:uniq(goods),imps:uniq(imps)};
 }
 // 결과보고서의 "강의별 주요 의견" 편집·삭제 저장 —
