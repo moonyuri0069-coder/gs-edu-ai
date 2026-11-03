@@ -970,18 +970,24 @@ let session=sessionStorage.getItem('gs_edu_login')==='1';
 // 그러면 이미 데이터가 있는 브라우저는 다른 사람이 새로 추가한 교육/응답을 자동으로 받아오지 못해
 // 사람마다 화면에 보이는 교육 수·응답자 수·만족도가 서로 달라지는 문제가 있었음
 if(session){
-  setTimeout(()=>syncFromSupabase().then(()=>render()),200);
+  setTimeout(()=>syncFromSupabase().then(()=>{if(!isEditingNow())render();}),200);
 }
 
 // 화면을 계속 켜두고 있어도 다른 사람이 입력한 내용이 자동으로 반영되도록 주기적으로 동기화
 // (입력창에 뭔가 입력 중일 때는 화면을 다시 그리지 않고, 다음 주기에 반영되도록 건너뜀)
 const AUTO_REFRESH_MS=30000;
+// 지금 글을 입력하는 중인지 — 결과보고서·교육진행안 등의 수정 칸은 INPUT이 아니라 contenteditable이라
+// 예전엔 입력 중으로 인식되지 않아서, 30초 자동 새로고침이 화면을 통째로 다시 그리며 치던 글이 사라졌음
+function isEditingNow(){
+  const el=document.activeElement;
+  if(!el||el===document.body)return false;
+  return /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)||!!el.isContentEditable;
+}
 setInterval(()=>{
   if(!session)return;
-  const el=document.activeElement;
-  const typing=el&&/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
   syncFromSupabase().then(()=>{
-    if(typing)return; // 입력 중에는 화면을 건드리지 않음 — 다음 주기에 자동 반영됨
+    // 동기화가 끝난 "지금" 다시 확인 — 서버 응답을 기다리는 사이에 입력을 시작했을 수 있음
+    if(isEditingNow())return; // 입력 중에는 화면을 건드리지 않음 — 다음 주기에 자동 반영됨
     render();
   });
 },AUTO_REFRESH_MS);
@@ -1134,7 +1140,20 @@ async function sbUpsert(table, data){
     });
   }catch(e){console.warn('Supabase 저장 오류:',e);}
 }
+// 방금 수정해서 서버에 올리는 중(또는 올린 직후)인 행은 동기화가 서버의 옛 값으로 덮어쓰지 않도록 추적함 —
+// 예전엔 수정 직후 동기화가 겹치면 방금 쓴 내용이 이전 값으로 되돌아가 "수정이 안 된" 것처럼 보였음
+const _patchState={inflight:{},last:{}};
+function recentlyPatched(table,id){
+  const k=table+':'+id;
+  return (_patchState.inflight[k]>0)||(Date.now()-(_patchState.last[k]||0)<20000);
+}
 async function sbPatch(table, id, data){
+  const k=table+':'+id;
+  _patchState.inflight[k]=(_patchState.inflight[k]||0)+1;
+  try{ return await _sbPatchRaw(table,id,data); }
+  finally{ _patchState.inflight[k]--; _patchState.last[k]=Date.now(); }
+}
+async function _sbPatchRaw(table, id, data){
   try{
     const res=await fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/'+table+'?id=eq.'+id,{
       method:'PATCH',
@@ -1218,6 +1237,7 @@ async function syncFromSupabase(){
       const delSetT=new Set(DB.deletedTrainingIds||[]);
       trainings.forEach(t=>{
         if(delSetT.has(t.id))return; // 이 브라우저(또는 다른 브라우저)에서 이미 삭제 처리한 교육은 다시 불러오지 않음
+        if(recentlyPatched('trainings',t.id))return; // 방금 이 화면에서 수정해 서버 저장 중인 교육은 이번 동기화에서 덮어쓰지 않음(다음 주기에 반영)
         const existing=byId(DB.trainings,t.id);
         const mapped={id:t.id,name:t.name,date:t.date,round:t.round,type:t.type,
           place:t.place,invited:t.invited,status:t.status,subtitle:t.subtitle||'',
@@ -2630,7 +2650,7 @@ function saveLectOpinionEdit(tid,lectId,idx,newText){
   if(arr[idx])arr[idx].t=newText;
   save();
   sbPatch('trainings',tid,{report_opinions:t.reportOpinions});
-  render();
+  // 입력한 글이 이미 화면에 있으므로 다시 그리지 않음 — 여기서 render()하면 다른 칸을 클릭해 이동할 때 새 칸의 포커스가 사라졌음
 }
 function deleteLectOpinion(tid,lectId,idx){
   const t=byId(DB.trainings,tid);if(!t)return;
@@ -2646,7 +2666,7 @@ function saveReportNeeds(tid,text){
   t.reportOpinions.needs=text;
   save();
   sbPatch('trainings',tid,{report_opinions:t.reportOpinions});
-  render();
+  // 입력한 글이 이미 화면에 있으므로 다시 그리지 않음 — 여기서 render()하면 다른 칸을 클릭해 이동할 때 새 칸의 포커스가 사라졌음
 }
 function saveReportEtcOpinion(tid,text){
   const t=byId(DB.trainings,tid);if(!t)return;
@@ -2654,7 +2674,7 @@ function saveReportEtcOpinion(tid,text){
   t.reportOpinions.etc=text;
   save();
   sbPatch('trainings',tid,{report_opinions:t.reportOpinions});
-  render();
+  // 입력한 글이 이미 화면에 있으므로 다시 그리지 않음 — 여기서 render()하면 다른 칸을 클릭해 이동할 때 새 칸의 포커스가 사라졌음
 }
 // AI 정제 포함 버전 (보고서 다운로드 시 사용)
 async function lectOpinionsAI(L,rsArr){
