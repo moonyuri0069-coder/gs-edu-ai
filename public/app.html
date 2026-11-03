@@ -298,6 +298,20 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.9rem}
 
 /* ═══ 연간일정관리 ═══ */
 .ep-tabs .btn{font-weight:700}
+/* 교육담당자 의견(댓글) */
+.cm-box{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface2);margin-top:16px}
+.cm-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:.82rem}
+.cm-meta{display:flex;gap:8px;align-items:center;font-size:.72rem;color:var(--ink3);margin-bottom:3px}
+.cm-meta b{color:var(--ink);font-size:.8rem}
+.cm-text{white-space:pre-wrap;word-break:break-word}
+.cm-x{margin-left:auto;background:none;border:none;color:var(--ink4);cursor:pointer;font-size:.8rem}
+/* 연간일정: 칸 삭제·드래그 */
+.ep-cell-tools{position:absolute;bottom:1px;right:2px;display:none;gap:2px;z-index:4}
+.ep-cell-card.has:hover .ep-cell-tools,.ep-cell-card.has:focus-within .ep-cell-tools{display:flex}
+.ep-cell-tools span{cursor:pointer;font-size:.7rem;line-height:1;padding:2px 3px;border-radius:5px;background:rgba(255,255,255,.85);color:#555}
+.ep-cell-tools .ep-drag{cursor:grab}
+.ep-table td.ep-drop{outline:2px dashed var(--green,#0e5a34);outline-offset:-3px}
+.ep-cell-card.dragging{opacity:.4}
 .ep-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .ep-toolbar .input{padding:6px 10px;font-size:.86rem}
 .ep-wrap{overflow:auto;border-radius:var(--r);border:1px solid var(--border);max-height:86vh;background:var(--surface)}
@@ -3642,6 +3656,97 @@ async function printAgenda(){
 }
 
 /* ═══════════ 설정 ═══════════ */
+/* ═══ 교육담당자 의견(댓글) 공통 ═══
+   댓글은 {id,author,text,at}. 삭제는 {id,del:1}로 표시(다른 사람 화면과 합칠 때 되살아나지 않도록).
+   저장할 때는 서버의 최신 댓글과 id 기준으로 합쳐서 올려 동시에 쓴 의견이 서로 덮어쓰지 않게 함. */
+function cmAuthor(){try{return localStorage.getItem('gs_edu_author')||'';}catch(e){return '';}}
+function cmSetAuthor(v){try{localStorage.setItem('gs_edu_author',String(v||'').trim());}catch(e){}}
+function cmParse(v){if(typeof v==='string'){try{v=JSON.parse(v);}catch(e){v=[];}}return Array.isArray(v)?v:[];}
+function cmMerge(a,b){
+  const m={};
+  [].concat(cmParse(a),cmParse(b)).forEach(c=>{
+    if(!c||!c.id)return;
+    const o=m[c.id];
+    m[c.id]=(o&&o.del)?o:(c.del?c:(o||c));
+  });
+  return Object.values(m).sort((x,y)=>String(x.at||'')<String(y.at||'')?-1:1);
+}
+function cmFmt(at){
+  try{const d=new Date(at);if(isNaN(d))return '';
+    const p=n=>String(n).padStart(2,'0');
+    return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;}catch(e){return '';}
+}
+// kind: 'fb'(강사피드백, a=교육id, b=강사id) / 'ep'(연간일정, a=계획id)
+function cmBoxHTML(kind,a,b,list,title,hint){
+  const vis=cmParse(list).filter(c=>c&&!c.del);
+  const items=vis.map(c=>`<div class="cm-item">
+    <div class="cm-meta"><b>${esc(c.author||'익명')}</b><span>${esc(cmFmt(c.at))}</span>
+      <button class="cm-x" title="이 의견 삭제" onclick="cmDel('${kind}','${a}','${b||''}','${c.id}')">✕</button></div>
+    <div class="cm-text">${esc(c.text||'')}</div></div>`).join('');
+  return `<div class="cm-box">
+    <div style="font-weight:800;margin-bottom:4px">💬 ${esc(title)} <span class="badge gray">${vis.length}</span></div>
+    <div class="card-sub" style="margin-bottom:10px">${esc(hint)}</div>
+    ${items||'<div style="color:var(--ink4);font-size:.8rem;margin-bottom:10px">아직 남긴 의견이 없어요.</div>'}
+    <div class="row" style="gap:8px;align-items:flex-start;flex-wrap:wrap">
+      <input id="cm-author" class="input" style="width:120px" placeholder="작성자" value="${esc(cmAuthor())}" onchange="cmSetAuthor(this.value)">
+      <textarea id="cm-text" class="input" rows="2" style="flex:1;min-width:220px" placeholder="교육담당자끼리 공유할 의견을 남겨주세요"></textarea>
+      <button class="btn primary sm" onclick="cmAdd('${kind}','${a}','${b||''}')">등록</button>
+    </div></div>`;
+}
+function cmTarget(kind,a,b){
+  if(kind==='fb'){
+    const t=byId(DB.trainings,a);if(!t)return null;
+    t.feedback=t.feedback||{};
+    const fb=t.feedback[b]=t.feedback[b]||{goods:[],imps:[]};
+    return{get:()=>cmParse(fb.comments),set:v=>{fb.comments=v;},push:()=>fbPush(a)};
+  }
+  const plan=DB.eduPlans.find(p=>p.id===a);if(!plan)return null;
+  return{get:()=>cmParse(plan.comments),set:v=>{plan.comments=v;},push:()=>epPushComments(a)};
+}
+function cmAdd(kind,a,b){
+  const ta=document.getElementById('cm-text'),au=document.getElementById('cm-author');
+  const text=(ta?ta.value:'').trim();
+  if(!text){toast('의견 내용을 입력해주세요');return;}
+  const author=((au?au.value:'')||cmAuthor()||'').trim();
+  if(!author){toast('작성자 이름을 입력해주세요');if(au)au.focus();return;}
+  cmSetAuthor(author);
+  const tg=cmTarget(kind,a,b);if(!tg)return;
+  tg.set(tg.get().concat([{id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),author,text,at:new Date().toISOString()}]));
+  save();render();tg.push();
+  toast('💬 의견이 등록되었어요');
+}
+function cmDel(kind,a,b,id){
+  if(!confirm('이 의견을 삭제할까요? (모든 교육담당자 화면에서 사라집니다)'))return;
+  const tg=cmTarget(kind,a,b);if(!tg)return;
+  tg.set(tg.get().map(c=>c.id===id?{id:c.id,del:1,at:c.at}:c));
+  save();render();tg.push();
+}
+// 강사피드백 저장: 서버의 최신 댓글을 먼저 받아 합친 뒤 올림
+async function fbPush(tid){
+  const t=byId(DB.trainings,tid);if(!t)return;
+  try{
+    const r=await fetch(SB_BASE+'/rest/v1/trainings?select=id,feedback&id=eq.'+encodeURIComponent(tid));
+    if(r.ok){
+      const rows=await r.json();
+      const rf=rows&&rows[0]&&rows[0].feedback;
+      if(rf&&typeof rf==='object'){
+        t.feedback=t.feedback||{};
+        Object.keys(rf).forEach(k=>{
+          const rc=rf[k]&&rf[k].comments;
+          if(!rc)return;
+          const loc=t.feedback[k]=t.feedback[k]||{goods:[],imps:[]};
+          loc.comments=cmMerge(loc.comments,rc);
+        });
+        save();
+      }
+    }
+  }catch(e){}
+  const ok=await sbPatch('trainings',tid,{feedback:t.feedback||{}});
+  if(ok!==false)render_ifIdle();
+  return ok;
+}
+function render_ifIdle(){try{if(!isEditingNow())render();}catch(e){}}
+
 function vFeedback(){
   if(!session)return '<div class="card card-pad"><div class="empty">로그인 후 이용할 수 있습니다</div></div>';
   const tlist=DB.trainings.slice().sort((a,b)=>a.date<b.date?1:-1);
@@ -3740,7 +3845,7 @@ function vFeedback(){
       save();
       // 여기서 서버에도 바로 저장해둬야 함 — 로컬에만 save()해두면, 방금 채운 내용이 서버에 반영되기 전에
       // 30초 주기 동기화가 서버의 예전(빈) 값으로 덮어써버려서 자동으로 채워진 의견이 사라지는 것처럼 보이는 문제가 있었음
-      sbPatch('trainings',FBQ,{feedback:t.feedback});
+      fbPush(FBQ);
     }
   }
 
@@ -3831,6 +3936,7 @@ function vFeedback(){
       <button class="btn primary" onclick="saveFeedback('${FBQ}','${selInstr}')">💾 저장</button>
       <button class="btn ghost" onclick="resetFBOpinions('${FBQ}','${selInstr}')">🔄 설문 의견으로 초기화</button>
     </div>
+    ${cmBoxHTML('fb',FBQ,selInstr,fb.comments,instrName+' 강사 — 교육담당자 의견 공유','이 강사에 대해 담당자끼리 공유할 의견·메모를 남겨요. 등록하면 다른 담당자 화면에도 보여요.')}
   </div>`;
 }
 
@@ -4039,7 +4145,7 @@ function saveFeedback(tid,instr){
   if(!t)return;
   save();
   // 다른 사람 화면에도 보이도록 서버에 저장 — 예전엔 여기서 엉뚱하게 attendees를 보내서 피드백이 서버에 저장되지 않았음
-  sbPatch('trainings',tid,{feedback:t.feedback||{}});
+  fbPush(tid);
   toast('✅ 피드백이 저장됐어요!');
 }
 
@@ -5951,6 +6057,113 @@ function toggleEduDone(id,gid,rid,month){
   save();render();
   sbUpsertEduPlan(plan);
 }
+// 연간일정 의견: 서버 최신 의견과 합쳐서 comments 열만 올림(다른 열은 건드리지 않음)
+async function epPushComments(id){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  try{
+    const r=await fetch(SB_BASE+'/rest/v1/edu_plans?select=id,comments&id=eq.'+encodeURIComponent(id));
+    if(r.ok){const rows=await r.json();if(rows&&rows[0])plan.comments=cmMerge(plan.comments,rows[0].comments);save();}
+  }catch(e){}
+  try{
+    await fetch(SB_BASE+'/rest/v1/edu_plans',{method:'POST',
+      headers:{'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({id:plan.id,comments:JSON.stringify(cmParse(plan.comments))})});
+  }catch(e){}
+  render_ifIdle();
+}
+// 낱개 교육(칸) 삭제 / 드래그 이동
+function deleteEduCell(id,gid,rid,m){
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const g=(plan.groups||[]).find(x=>x.id===gid);if(!g)return;
+  const r=(g.rows||[]).find(x=>x.id===rid);if(!r||!r.cells)return;
+  const c=epCellVal(r,m);
+  if(!confirm(`${m}월 「${c.text||'(이름없음)'}」 교육을 삭제할까요?`))return;
+  delete r.cells[m];
+  save();render();sbUpsertEduPlan(plan);
+  toast('삭제되었어요');
+}
+let EP_DRAG=null;
+function epDragStart(ev,gid,rid,m){
+  EP_DRAG={gid,rid,m};
+  try{ev.dataTransfer.effectAllowed='move';ev.dataTransfer.setData('text/plain',gid+'|'+rid+'|'+m);}catch(e){}
+  const card=ev.target.closest('.ep-cell-card');if(card)card.classList.add('dragging');
+}
+function epDragEnd(ev){
+  EP_DRAG=null;
+  document.querySelectorAll('.ep-drop,.dragging').forEach(e=>e.classList.remove('ep-drop','dragging'));
+}
+function epDragOver(ev,td){if(!EP_DRAG)return;ev.preventDefault();td.classList.add('ep-drop');}
+function epDragLeave(td){td.classList.remove('ep-drop');}
+function epDrop(ev,id,gid,rid,m){
+  ev.preventDefault();
+  const src=EP_DRAG;epDragEnd();
+  if(!src)return;
+  if(src.gid===gid&&src.rid===rid&&src.m===m)return;
+  const plan=DB.eduPlans.find(p=>p.id===id);if(!plan)return;
+  const find=(g0,r0)=>{const g=(plan.groups||[]).find(x=>x.id===g0);return g?(g.rows||[]).find(x=>x.id===r0):null;};
+  const rs=find(src.gid,src.rid),rd=find(gid,rid);
+  if(!rs||!rd)return;
+  rs.cells=rs.cells||{};rd.cells=rd.cells||{};
+  const a=rs.cells[src.m],b=rd.cells[m];
+  if(b!=null&&b!=='')rs.cells[src.m]=b;else delete rs.cells[src.m];
+  if(a!=null)rd.cells[m]=a;else delete rd.cells[m];
+  save();render();sbUpsertEduPlan(plan);
+  toast(b?'두 교육의 위치를 서로 바꿨어요':'교육을 옮겼어요');
+}
+// 연간일정 PDF (가로 A4, 표시 중인 달만) — 의견도 아래에 함께 넣음
+async function printEduPlanPDF(){
+  const plan=epCurrent();if(!plan)return;
+  const hidden=plan.hiddenMonths||[];
+  const months=EP_MONTHS.filter(m=>!hidden.includes(m));
+  const palette=['#dce9ff','#d7f7e3','#f6def9','#ffe9c9','#fddce1'];
+  let rowsHTML='';
+  (plan.groups||[]).forEach((g,gi)=>{
+    const rows=(g.rows&&g.rows.length)?g.rows:[{id:'x',label:'',countLabel:'',cells:{}}];
+    rows.forEach((r,ri)=>{
+      rowsHTML+=`<tr>${ri===0?`<td rowspan="${rows.length}" style="width:70px;background:${palette[gi%5]};font-weight:800;border:1px solid #bbb;padding:4px;vertical-align:middle">${esc(g.name||'')}<div style="font-weight:600;font-size:9px;color:#555">${esc(g.countLabel||'')}</div></td>`:''}
+        <td style="width:78px;border:1px solid #bbb;padding:4px;font-weight:700">${esc(r.label||'')}<div style="font-weight:500;font-size:9px;color:#555">${esc(r.countLabel||'')}</div></td>
+        ${months.map(m=>{const c=epCellVal(r,m);const has=c.text||c.place||c.date;
+          return `<td style="border:1px solid #bbb;padding:3px;vertical-align:top;${has?'background:'+palette[gi%5]:''}">${has?`<div style="font-weight:700;${c.done?'text-decoration:line-through;color:#777':''}">${esc(c.text)}</div><div style="font-size:9px;color:#444">${esc(c.place)}</div><div style="font-size:9px;color:#444">${esc(c.date)}</div>`:''}</td>`;}).join('')}
+      </tr>`;
+    });
+  });
+  const cms=cmParse(plan.comments).filter(c=>c&&!c.del);
+  const html=`<div style="width:1120px;padding:20px;background:#fff;color:#111;font-family:'Malgun Gothic','Noto Sans KR',sans-serif;font-size:11px">
+    <div style="font-size:20px;font-weight:800;margin-bottom:10px">📆 ${esc(plan.title||plan.year+'년 교육 운영 캘린더')}</div>
+    <table style="border-collapse:collapse;width:100%;table-layout:fixed"><thead><tr>
+      <th style="width:70px;border:1px solid #bbb;background:#eee;padding:4px">구분</th><th style="width:78px;border:1px solid #bbb;background:#eee;padding:4px">세부 항목</th>
+      ${months.map(m=>`<th style="border:1px solid #bbb;background:#eee;padding:4px">${m}월<div style="font-size:9px;color:#92720d;font-weight:600">${esc((plan.holidays||{})[m]||'')}</div></th>`).join('')}
+    </tr></thead><tbody>${rowsHTML}</tbody></table>
+    ${cms.length?`<div style="margin-top:14px;font-weight:800;font-size:13px">💬 교육담당자 의견</div>${cms.map(c=>`<div style="border:1px solid #ccc;border-radius:6px;padding:5px 8px;margin-top:5px"><b>${esc(c.author||'익명')}</b> <span style="color:#777;font-size:9px">${esc(cmFmt(c.at))}</span><div style="white-space:pre-wrap">${esc(c.text)}</div></div>`).join('')}`:''}
+  </div>`;
+  const box=document.createElement('div');
+  box.style.cssText='position:fixed;left:-99999px;top:0;background:#fff';
+  box.innerHTML=html;document.body.appendChild(box);
+  try{
+    if(!window.html2canvas||!window.jspdf)throw new Error('lib');
+    toast('PDF 만드는 중…');
+    const canvas=await html2canvas(box.firstElementChild,{scale:2,useCORS:true,logging:false,backgroundColor:'#fff'});
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    const pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight(),mg=8;
+    const iw=pw-mg*2,ih=canvas.height*iw/canvas.width;
+    const pageH=ph-mg*2;
+    let y=0,first=true;
+    while(y<ih-0.5){
+      if(!first)pdf.addPage();first=false;
+      const sliceH=Math.min(pageH,ih-y);
+      const sc=document.createElement('canvas');sc.width=canvas.width;sc.height=Math.round(sliceH*canvas.width/iw);
+      sc.getContext('2d').drawImage(canvas,0,Math.round(y*canvas.width/iw),canvas.width,sc.height,0,0,canvas.width,sc.height);
+      pdf.addImage(sc.toDataURL('image/jpeg',0.95),'JPEG',mg,mg,iw,sliceH);
+      y+=pageH;
+    }
+    pdf.save(`연간일정_${plan.year}.pdf`);
+  }catch(e){
+    const w=window.open('','_blank');
+    if(w){w.document.write('<html><head><meta charset="utf-8"><title>연간일정</title><style>@page{size:A4 landscape;margin:8mm}</style></head><body>'+html+'</body></html>');w.document.close();setTimeout(()=>w.print(),400);}
+    else toast('팝업이 막혀 PDF를 만들 수 없어요');
+  }finally{box.remove();}
+}
 function sbUpsertEduPlan(plan){
   try{
     fetch('https://eldpjvlefuhyfacrmwsl.supabase.co/rest/v1/edu_plans',{
@@ -5982,8 +6195,8 @@ async function syncEduPlans(){
       if(delSet.has(row.id))return; // 이 브라우저에서 이미 삭제한 연도는 다시 불러오지 않음
       const existing=DB.eduPlans.find(p=>p.id===row.id);
       const mapped={id:row.id,year:row.year,title:row.title||'',holidays:row.holidays||{},groups:row.groups||[]};
-      if(existing)Object.assign(existing,mapped);
-      else DB.eduPlans.push(mapped);
+      if(existing){const lc=existing.comments;Object.assign(existing,mapped);existing.comments=cmMerge(lc,row.comments);}
+      else{mapped.comments=cmParse(row.comments);DB.eduPlans.push(mapped);}
     });
     save();
   }catch(e){console.warn('연간일정관리 동기화 오류:',e);}
@@ -6082,8 +6295,9 @@ function vEduPlan(){
     ${visMonths.map(m=>{
       const c=epCellVal(r,m);
       const has=c.text||c.place||c.date;
-      return `<td>
+      return `<td ondragover="epDragOver(event,this)" ondragleave="epDragLeave(this)" ondrop="epDrop(event,'${plan.id}','${g.id}','${r.id}','${m}')">
         <div class="ep-cell-card ${has?'has':''} ${c.done?'done':''}">
+          ${has?`<div class="ep-cell-tools"><span class="ep-drag" draggable="true" title="끌어서 다른 칸으로 이동(이미 있으면 서로 교체)" ondragstart="epDragStart(event,'${g.id}','${r.id}','${m}')" ondragend="epDragEnd(event)">⠿</span><span title="이 교육 삭제" onclick="deleteEduCell('${plan.id}','${g.id}','${r.id}','${m}')">✕</span></div>`:''}
           ${has?`<input type="checkbox" class="ep-done-chk" title="완료 표시" ${c.done?'checked':''} onclick="toggleEduDone('${plan.id}','${g.id}','${r.id}','${m}')">`:''}
           <textarea class="input ep-name" rows="2" onchange="updateEduCellField('${plan.id}','${g.id}','${r.id}','${m}','text',this.value)">${esc(c.text)}</textarea>
           <div class="ep-sub-row">
@@ -6103,7 +6317,8 @@ function vEduPlan(){
 
   const table=`<div class="card"><div class="card-pad" style="border-bottom:1px solid var(--border)">
       <div class="spread"><div class="card-title">📆 ${plan.year}년 교육 운영 캘린더</div>
-        <button class="btn sm primary" onclick="addEduGroup('${plan.id}')">＋ 대분류(구분) 추가</button></div>
+        <div class="row" style="gap:6px"><button class="btn sm" onclick="printEduPlanPDF()">📄 PDF 다운로드</button>
+        <button class="btn sm primary" onclick="addEduGroup('${plan.id}')">＋ 대분류(구분) 추가</button></div></div>
     </div>
     ${legend}
     ${hiddenBar}
@@ -6117,7 +6332,7 @@ function vEduPlan(){
     </table></div>
   </div>`;
 
-  return tabBar+header+table;
+  return tabBar+header+table+cmBoxHTML('ep',plan.id,'',plan.comments,plan.year+'년 연간일정 — 교육담당자 의견','일정에 대한 의견·메모를 남겨 담당자끼리 공유해요. PDF에도 함께 들어가요.');
 }
 
 /* ═══════════ 히스토리 관리 ═══════════ */
